@@ -1,0 +1,78 @@
+% Time-stamp: <2024-08-01 17:08:12 lperrin>
+
+
+\documentclass[presentation,aspectratio=1610]{beamer}
+
+%% Full theme: AnnArbor Antibes Bergen Berkeley Berlin Boadilla boxes CambridgeUS Copenhagen Darmstadt default Dresden EastLansing Frankfurt Goettingen Hannover Ilmenau JuanLesPins Luebeck Madrid Malmoe Marburg Montpellier PaloAlto Pittsburgh Rochester Singapore Szeged Warsaw
+% \usetheme{Luebeck}
+
+%% outer themes (header/footer): default infolines miniframes smoothbars sidebar split shadow tree smoothtree
+% \useoutertheme[subsection=false]{smoothbars}
+% \usetheme{Rochester}
+ \useoutertheme{split}
+
+%% inner theme (content): default circles rectangles rounded inmargin
+\useinnertheme{rectangles}
+
+\usecolortheme{beaver}
+
+\input{style}
+
+
+
+\defcolvar{n}{n}{red}
+\defcolvar{l}{\ell}{blue}
+
+\title{TITLE}
+\author[Léo Perrin]{Léo Perrin\inst{1} \\[1em]
+	{\tiny
+    \emph{including joint works with} \\ People
+  }}
+
+\institute{Inria, Paris}
+\titlegraphic{\includegraphics[height=1.1cm]{figures/inria}}
+
+
+\date{???}
+
+
+\begin{document}
+
+{
+  \pagestyle{empty}
+
+  \maketitle
+
+
+  \begin{frame}{The Problem}
+  \end{frame}
+}
+
+
+\tocStartsAppearingHere{}
+
+
+\section{Section 1}
+
+\subsection{SubSection 1}
+
+\begin{frame}{Slide}
+  \showThenHighlight{Content} and variable $\myl$
+\end{frame}
+
+\section{Conclusion}
+
+\begin{frame}{Conclusion}
+  \pause\vspace{1cm}
+  
+  \begin{center}
+    \textbf{Thank you!}
+  \end{center}
+\end{frame}
+
+\end{document}
+
+
+% Local Variables:
+% compile-command: "xelatex presentation.tex"
+% End:

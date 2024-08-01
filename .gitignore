@@ -1,0 +1,13 @@
+*~
+*#
+*.o
+*.out
+*.so
+*.pyc
+*.aux
+*.snm
+*.nav
+*.log
+*.bbl
+*.blg
+*.toc

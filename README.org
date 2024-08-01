@@ -1,6 +1,6 @@
 #+TITLE: Levain
 #+DESCRIPTION: Python/SAGE classes, LaTeX macros files, file/project templates, and all the small stuff I regularly need to use or copy/paste into my work as researcher 
-# Time-stamp: <2024-08-01 17:09:33 lperrin>
+# Time-stamp: <2024-08-01 17:14:22 lperrin>
 
 
 The purpose of this repository is to store (both for me and for
@@ -8,8 +8,9 @@ others) all the various small scripts, macros files, project
 templates, and whatever else that I often need to comeback to on a
 regular basis during my day-to-day work.
 
-Feel free to "borrow" anything you like here, and if you think I
-should add something to it don't hesitate to tell me about it!
+Feel free to "borrow" anything you like here (it is released under an
+MIT license), and if you think I should add something to it don't
+hesitate to tell me about it!
 
 * Python Utils
 The =py= folder contains several python classes that help me when

@@ -1,6 +1,6 @@
 #+TITLE: Levain
 #+DESCRIPTION: Python/SAGE classes, LaTeX macros files, file/project templates, and all the small stuff I regularly need to use or copy/paste into my work as researcher 
-# Time-stamp: <2024-08-01 17:14:22 lperrin>
+# Time-stamp: <2024-08-02 16:16:41 lperrin>
 
 
 The purpose of this repository is to store (both for me and for
@@ -25,7 +25,6 @@ running some experiments in Python (or, most often SAGE):
   result.
 
 
-
 * Templates
 The =templates= folder contains files and folders I end up
 copy/pasting often: the idea is that bothered writing some
@@ -38,3 +37,10 @@ boiler-plate code once, and don't want to do it by hand again.
   usually use. It is intended for a medium to longer length
   presentation (think 20min conference talk or more). The compiled
   result is provided in this folder if you are curious.
+
+
+* Notes
+If you want the logbook to read data from the git repository, you need
+install the package gitpython (=pip install gitpython= and
+=sage -pip install gitpython=)
+

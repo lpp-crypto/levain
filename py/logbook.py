@@ -1,14 +1,29 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-02 14:36:12 lperrin> 
+# Time-stamp: <2024-08-02 17:49:23 lperrin> 
 
 import datetime
+import sys
+import os
 
 from collections import defaultdict
 
 
 # !SECTION! Setting up default parameters and the context 
 # =======================================================
+
+
+# !SUBSECTION! Checking the presence of gitpython
+
+# if you want the logbook to read data from the git repository, you
+# need install the package gitpython (`pip install gitpython` and
+# `sage -pip install gitpython`)
+try:
+    import git
+    IS_GIT = True
+except:
+    IS_GIT = False
+
 
 # !SUBSECTION! Is SAGE used? 
 
@@ -45,6 +60,28 @@ else:
 INDENT = " "
 DEFAULT_INT_FORMAT = "{:3d}"
 DEFAULT_FLOAT_FORMAT = "{:8.3e}"
+
+
+# !SUBSECTION! To have colors in the terminal
+
+# explanations: https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
+T_COLORS = {
+    "red" : '\033[91m',
+    "green" : '\033[92m',
+    "yellow" : '\033[93m',
+    "blue" : '\033[94m',
+    "purple" : '\033[95m',
+    "cyan" : '\033[96m',
+    "black" : '\033[98m',
+    "endcol" : '\033[0m',
+    "bold" : '\033[1m',
+    "underline" : '\033[4m',
+}
+    
+def stylize(line, style):
+    if style not in T_COLORS.keys():
+        raise Exception("unknown style: '{}".format(style))
+    return T_COLORS[style] + line + T_COLORS["endcol"]
 
 
 # !SUBSECTION!  Printing functions
@@ -238,11 +275,11 @@ class LogBook:
         if self.print_format == "org":
             self.headings = lambda depth : "*" * depth
             self.bullet = "-"
-            self.pretty_title = "#+TITLE: " + title
+            self.pretty_title = "#+TITLE: {}\n".format(title)
         elif self.print_format == "md":
             self.headings = lambda depth : "#" * (depth + 1)
             self.bullet = "*"
-            self.pretty_title = "{}\n{}".format(title, "="*len(title))
+            self.pretty_title = "{}\n{}\n".format(title, "="*len(title))
         else:
             raise Exception("unsuported print format: {}".format(self.print_format))
         # initializing the state
@@ -254,67 +291,148 @@ class LogBook:
         if self.with_mem:
             import tracemalloc
             self.mem_tracer = tracemalloc
+        self.enum_counter = None
 
 
     # !SUBSECTION! Logging events and results
     
     def section(self, depth, heading):
-        self.story.append([depth, heading])
+        self.story.append({
+            "content": heading,
+            "type": "head" + str(depth)
+        })
         self.current_toc_depth = depth
         if self.verbose:
-            print("{}{} {}".format(
-                "\n\n" if depth == 1 else "\n" if depth == 2 else "",                
+            line = "{}{} {}".format(
+                "\n" if depth == 1 else "",                
                 self.headings(depth),
                 heading
-            ))
+            )
+            line = stylize(line, "purple")
+            if depth == 1:
+                line = stylize(line, "bold")
+            print(line)
         
         
-    def log_event(self, event):
-        # !TODO! more sophisticated grammar to handle non-lists, enumerations, etc
-        
-        # Mockup: lgbk.log_event("n*", "truc") logs "truc" in a
-        # numbered list (possibly starting a new one if necessary) and
-        # without a time-stamp.
-        timed_event = [
-            datetime.datetime.now().isoformat(" ").split(".")[0],
-            event
-        ]
-        self.story.append(timed_event)
-        if self.verbose:
-            print("{} {} [{}] {}".format(
-                INDENT * self.current_toc_depth,
-                self.bullet,
-                timed_event[0],
-                timed_event[1],
-            ))
+    def log_event(self, event, desc="l"):
+        tstamp = datetime.datetime.now().isoformat(" ").split(".")[0]
+        full_event = {"content": event}
+        # do we need the time-stamp?
+        if "*" in desc:
+            full_event["tstamp"] = ""
+        else:
+            full_event["tstamp"] = "({}) ".format(tstamp)
+        # do we need a color?
+        if "r" in desc:
+            style = "red"
+        elif "g" in desc:
+            style = "green"
+        else:
+            style = "black"
+        # do we need a prefix?
+        if "0" in desc:
+            prefix_terminal = stylize("[FAIL] ", "red")
+            prefix_text = "[FAIL] "
+        elif "1" in desc:
+            prefix_terminal = stylize("[result] ", "green")
+            prefix_text = "[result] "
+        else:
+            prefix_terminal, prefix_text = "", ""
+        # handling the different styles
+        if "l" in desc:         # -- plain list
+            self.enum_counter = None # stopping an enumeration (if any)
+            full_event["type"] = "list"
+            if self.verbose:
+                print(stylize(
+                    "{} {} {}{} {}".format(INDENT * self.current_toc_depth,
+                                           self.bullet,
+                                           full_event["tstamp"],
+                                           prefix_terminal,
+                                           full_event["content"]),
+                    style
+                ))
+        elif "n" in desc:       # -- numbered list
+            if self.enum_counter == None:
+                self.enum_counter = 0
+            else:
+                self.enum_counter += 1
+            full_event["type"] = "enum" + str(self.enum_counter)
+            if self.verbose:
+                print(stylize(
+                    "{} {}.{}{} {}".format(INDENT * self.current_toc_depth,
+                                           self.enum_counter,
+                                           full_event["tstamp"],
+                                           prefix_terminal,
+                                           full_event["content"]),
+                    style
+                ))
+        else:                   # -- plain text
+            self.enum_counter = None # stopping an enumeration (if any)
+            full_event["type"] = "text"
+            if self.verbose:
+                print(stylize(
+                    "{} {}{}{}".format(INDENT * self.current_toc_depth,
+                                       full_event["tstamp"],
+                                       prefix_terminal,
+                                       full_event["content"]),
+                    style
+                ))
+        full_event["content"] = prefix_text + full_event["content"]
+        self.story.append(full_event)
+
 
             
     def log_result(self, result):
         self.results.append(result)
-        self.log_event("[result] " + pretty_result(result))
+        self.log_event(pretty_result(result),
+                       desc="l1")
+            
+    def log_fail(self, result):
+        self.log_event(pretty_result(result),
+                       desc="l0")
 
         
     def save_to_file(self):
         with open(self.file_name, "w") as f:
             f.write("{}\n".format(self.pretty_title))
-            f.write("Experimental log generated on the {}.\n\n".format(
+            f.write("Experimental log generated on {}.\n".format(
                 datetime.datetime.now().strftime("%a. %b. %Y at %H:%M")
             ))
+            f.write("We ran script {} with command line args {}.\n".format(
+                __file__,
+                sys.argv
+            ))
+            # !TODO! write the commit/branch etc. 
             for line in self.story:
-                if isinstance(line, list):
-                    if isinstance(line[0], str): # case of a time-stamp
-                        f.write("{} [{}] {}\n".format(self.bullet,
-                                                      line[0],
-                                                      line[1]))
-                    else: # case of a heading
-                        depth = line[0]
-                        f.write("{}{} {}\n".format(
-                            "\n\n" if depth == 1 else "\n" if depth == 2 else "",                
-                            self.headings(depth),
-                            line[1]
-                        ))
+                if "type" not in line.keys():
+                    raise Exception(
+                        "error: a story line doesn't have a type (story line: {})".format(line)
+                    )
+                elif line["type"][:4] == "head":
+                    depth = int(line["type"][4:], 10)
+                    f.write("{}{} {}\n".format(
+                        "\n\n" if depth == 1 else "",                
+                        self.headings(depth),
+                        line["content"]
+                    ))
+                elif line["type"][:4] == "enum":
+                    depth = int(line["type"][4:], 10)
+                    f.write("{}.{} {}\n".format(
+                        depth,
+                        line["tstamp"],
+                        line["content"]
+                    ))
+                elif line["type"] == "list":
+                    f.write("{} {}{}\n".format(
+                        self.bullet,
+                        line["tstamp"],
+                        line["content"]
+                    ))
                 else:
-                    f.write("{} {}\n".format(self.bullet, str(line)))
+                    f.write("{}{}\n".format(
+                        line["tstamp"],
+                        line["content"]
+                    ))
 
 
     # !SUBSECTION!  The functions needed by the "with" logic
@@ -325,7 +443,7 @@ class LogBook:
         if self.with_mem:
             self.mem_tracer.start()
         if self.verbose:
-            print(self.title + "\n")
+            print("\n" + stylize(stylize(self.title, "bold"), "underline"))
         return self
     
 
@@ -349,9 +467,7 @@ class LogBook:
                     minutes,
                     seconds
             ))
-            self.story.append(elapsed_time_description)
-            if self.verbose:
-                print(self.bullet + " " + elapsed_time_description)
+            self.log_event(elapsed_time_description, desc="l*")
         # handling memory complexity
         if self.with_mem:       
             memory_size, memory_peak = self.mem_tracer.get_traced_memory()
@@ -368,31 +484,10 @@ class LogBook:
                 memory_peak,
                 pretty_peak
             )
-            self.story.append(memory_description)
-            if self.verbose:
-                print(self.bullet + " " + memory_description)
+            self.log_event(memory_description, desc="l*")
         # handling results
-        # -- in the logbook itself
-        if len(self.results) == 0:
-            results_description = "no results found"
-        else:
-            results_description = "{:d} result(s) found".format(len(self.results))
-            self.section(2, results_description)
-            number_length = len(str(len(self.results)))
-            counter = 0
-            for res in self.results:
-                pretty_res = pretty_result(res)
-                self.story.append(pretty_res)
-                print("{}{:d}. {}{}".format(
-                    INDENT,
-                    counter,
-                    " "*(number_length - len(str(counter))),
-                    pretty_res
-                ))
-                counter += 1
-        self.save_to_file()
         # -- in the separated file (if relevant)
-        if self.result_file != None:
+        if self.result_file != None and len(self.results) > 0:
             with open(self.result_file, "w") as f:
                 f.write("# Output of \"{}\", generated on {}\n".format(
                     self.title,
@@ -410,15 +505,18 @@ class LogBook:
                     ))
                     counter += 1
                 f.write("]\n")
-            if self.print_format == "org":
-                self.section(2, "results written to [[./{}][{}]".format(
-                    self.result_file,
-                    self.result_file
-                ))
-            else:
-                self.section(2, "results written to {}".format(
-                    self.result_file
-                ))
+            self.section(2, "Results written to {}".format(
+                self.result_file
+            ))
+        # -- in the logbook itself
+        if len(self.results) == 0:
+            results_description = "no results found"
+        else:
+            results_description = "{:d} result(s) found".format(len(self.results))
+            self.section(2, results_description)
+            for res in self.results:
+                self.log_event(pretty_result(res), desc="n*")
+        self.save_to_file()
 
                 
             
@@ -428,13 +526,27 @@ class LogBook:
 
 if __name__ == "__main__":
     # generating a dummy logbook
-    with LogBook("logbook.org",
+    with LogBook("lgbk.org",
                  verbose=True,
                  result_file="res.py",
                  ) as lgbk:
+
         lgbk.section(1, "starting up")
-        lgbk.log_event("bli")
-        lgbk.log_event("blu")
+        lgbk.log_event("bli", desc="t*")
+
+        lgbk.section(2, "doing useless enumerations")
+        for i in range(0, 4):
+            lgbk.log_event("a useless enumeration ({})".format(i), desc="n*")
+        lgbk.log_event("and I cut the enumeration...", desc="t")
+        lgbk.log_event("...and I put back the enumeration!", desc="t")
+        for i in range(0, 4):
+            lgbk.log_event("another useless enumeration ({})".format(i), desc="n*")
+
+        lgbk.section(2, "a second subheading")
+        lgbk.log_event("plain text line", desc="t*")
+        lgbk.log_event("plain text line with time-stamp", desc="t")
+        
+        lgbk.section(1, "moving on to pointless computations")
         blu = []
         for x in range(0, 2**5):
             blu.append(x**3)
@@ -443,16 +555,18 @@ if __name__ == "__main__":
             "sum of cubes": sum(x**3 for x in blu),
             "sum of squares": sum(x**2 for x in blu)
         })
-        for x in range(0, 12):
+        for x in range(0, 4):
             lgbk.log_result({"padding" : x})
+        lgbk.log_fail("a failure")
         if IS_SAGE:
             lgbk.log_result(Matrix([[0, 1], [2,300000]]))
         else:
             lgbk.log_result([[0, 1], [2,300000]])
-        lgbk.section(2, "loading stuff")
-        lgbk.log_event("bli bla blu")
-        lgbk.section(1, "investigating")
-
+        
     # testing reimport of the results
     import res
     print(res.results)
+    for k in T_COLORS.keys():
+        if k != "endcol":
+            print(T_COLORS[k] + k + T_COLORS["endcol"])
+

@@ -1,17 +1,13 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-01 15:49:19 lperrin> 
+# Time-stamp: <2024-08-02 11:34:42 lperrin> 
 
 import datetime
 import sys
 import time
-import tracemalloc
 
 from collections import defaultdict
 
-# for test
-from math import floor
-from statistics import mean, variance
 
 INDENT = " "
 DEFAULT_INT_FORMAT = "{:3d}"
@@ -25,7 +21,17 @@ except:
 
 if IS_SAGE:
     from sage.all import *
-
+    import numpy
+    mean = numpy.mean
+    variance =  numpy.var
+    int_types = (int, Integer)
+    float_types = (float, sage.rings.real_mpfr.RealNumber)
+else:
+    from math import floor
+    from statistics import mean, variance
+    int_types = (int)
+    float_types = (float)
+    
 
 def pretty_result(r,
                   int_format=DEFAULT_INT_FORMAT,
@@ -47,30 +53,16 @@ def pretty_result(r,
         else:
             # case of a plain list
             return str(r)
-    else:
-        if IS_SAGE:
-            # checking if sage matrix
-            try:
-                x = Matrix(r)
-                if x == r:
-                    return pretty_result([[x for x in row] for row in r.rows()])
-            except:
-                pass
-        # checking if int
-        try:
-            x = int(r)
-            if x == r:
-                return int_format.format(x)
-        except:
+    elif isinstance(r, int_types):
+        return int_format.format(r)
+    elif isinstance(r, float_types):
+        return float_format.format(r)
+    elif IS_SAGE:
+        if isinstance(r, sage.matrix.matrix0.Matrix):
+            return pretty_result([[x for x in row] for row in r.rows()])
+        else:
             pass
-        # checking if real
-        try:
-            x = float(r)
-            if x == r:
-                return float_format.format(x)
-        except:
-            pass        
-        return str(r)
+    return str(r)
     
 
 def python_readable_string(y):
@@ -87,19 +79,16 @@ def python_readable_string(y):
             result += "{}: {}, ".format(python_readable_string(k),
                                         python_readable_string(y[k]))
         return result[:-2] + "}"
-    else:
-        if IS_SAGE:
-            try:
-                x = Matrix(y)
-                if x == y:
-                    return "Matrix({}, {}, {})".format(
-                        x.nrows(),
-                        x.ncols(),
-                        str(x.rows())
-                    )
-            except:
-                pass
-        return str(y)
+    elif IS_SAGE:
+        if isinstance(r, sage.matrix.matrix0.Matrix):
+            return "Matrix({}, {}, {})".format(
+                x.nrows(),
+                x.ncols(),
+                str(x.rows())
+            )
+        else:
+            pass
+    return str(y)
             
         
 
@@ -109,7 +98,7 @@ class LogBook:
                  title="Experiment",
                  verbose=False,
                  print_format=None,
-                 result_file=False,
+                 result_file=None,
                  with_time=True,
                  with_mem=True
                  ):
@@ -144,6 +133,9 @@ class LogBook:
         self.with_mem = with_mem
         self.results = []
         self.story = []
+        if self.with_mem:
+            import tracemalloc
+            self.mem_tracer = tracemalloc
 
         
     def section(self, depth, heading):
@@ -204,7 +196,7 @@ class LogBook:
         if self.with_time:
             self.start_time = datetime.datetime.now()
         if self.with_mem:
-            tracemalloc.start()
+            self.mem_tracer.start()
         if self.verbose:
             print(self.title + "\n")
         return self
@@ -234,8 +226,8 @@ class LogBook:
                 print(self.bullet + " " + elapsed_time_description)
         # handling memory
         if self.with_mem:
-            memory_size, memory_peak = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
+            memory_size, memory_peak = self.mem_tracer.get_traced_memory()
+            self.mem_tracer.stop()
             if memory_peak > 1024**3:
                 pretty_peak = "(= {:.2f}GB)".format(memory_peak / 1024**3)
             elif memory_peak > 1024**2:
@@ -309,14 +301,14 @@ if __name__ == "__main__":
         lgbk.log_result(sum(blu))
         lgbk.log_result({
             "mean": mean(blu),
-            "var": float(variance(blu))/2**20 + 0.1
+            "squares": sum(x**2 for x in blu)
         })
-        for x in range(0, 12):
-            lgbk.log_result({"padding" : x})
-        if IS_SAGE:
-            lgbk.log_result(Matrix([[0, 1], [2,300000]]))
-        else:
-            lgbk.log_result([[0, 1], [2,300000]])
+        # for x in range(0, 12):
+        #     lgbk.log_result({"padding" : x})
+        # if IS_SAGE:
+        #     lgbk.log_result(Matrix([[0, 1], [2,300000]]))
+        # else:
+        lgbk.log_result([[0, 1], [2,300000]])
         time.sleep(1)
         lgbk.section(2, "loading stuff")
         lgbk.log_event("bli bla blu")

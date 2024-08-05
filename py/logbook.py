@@ -1,28 +1,17 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-05 13:58:41 lperrin> 
+# Time-stamp: <2024-08-05 17:31:52 lperrin> 
 
 import datetime
 import sys
 import os
+import pickle
 
 from collections import defaultdict
 
 
 # !SECTION! Setting up default parameters and the context 
 # =======================================================
-
-
-# !SUBSECTION! Checking the presence of gitpython
-
-# if you want the logbook to read data from the git repository, you
-# need install the package gitpython (`pip install gitpython` and
-# `sage -pip install gitpython`)
-try:
-    import git
-    IS_GIT = True
-except:
-    IS_GIT = False
 
 
 # !SUBSECTION! Is SAGE used? 
@@ -55,6 +44,11 @@ else:
 # ==================
 
 # !SUBSECTION! Default strings
+
+def time_stamp():
+    """Returns a string representation of the current date and time."""
+    return datetime.datetime.now().isoformat(" ").split(".")[0]
+
 
 # The default strings used when printing both to stdout and to files
 INDENT = " "
@@ -228,7 +222,21 @@ class LogBook:
     - `with_mem`: if set to True, the maximum memory used while the
       LogBook is used is computed and output in the end. Defaults to
       True.
-    
+
+    - `with_preamble`: if set to True, the output (both in the
+      terminal and in the file) will contain a preamble describing
+      when the script was executed, how the script was called, and the
+      current git state of the file (if GitPython is
+      installed). Defaults to True.
+
+    - `with_conclusion`: if set to True, the output (both in the
+      terminal and in the file) will contain a conclusion describing
+      the time and memory complexities of the program, as a well the
+      number of results obtained. Defaults to True.
+
+    - `with_final_results`: if set to True, the items in the `results`
+      list will be listed at the end of the conclusion. Defaults to
+      False.
 
     Usage:
 
@@ -322,7 +330,7 @@ class LogBook:
         
         
     def log_event(self, event, desc="l"):
-        tstamp = datetime.datetime.now().isoformat(" ").split(".")[0]
+        tstamp = time_stamp()
         full_event = {"content": event}
         # do we need the time-stamp?
         if "*" in desc:
@@ -469,7 +477,7 @@ class LogBook:
                 )
             except:
                 self.log_fail("No git information to write.")
-            self.section(1, "Experiment")
+            self.section(1, "Experiment starts now")
         # initializing measurements
         if self.with_time:
             self.start_time = datetime.datetime.now()
@@ -532,33 +540,54 @@ class LogBook:
         # !`save_data_as_py_module`, a function doing the same thing
         # !outside of this class that could be called on its own
         if self.result_file != None and len(self.results) > 0:
-            with open(self.result_file, "w") as f:
-                f.write("# Output of \"{}\", generated on {}\n".format(
-                    self.title,
-                    datetime.datetime.now().isoformat(" ").split(".")[0]
-                ))
-                f.write("# see LogBook at {}\n".format(self.file_name))
-                if IS_SAGE:
-                    f.write("from sage.all import *\n\n")
-                f.write("results = [\n")
-                counter = 0
-                for x in self.results:
-                    f.write("{},    # {:d}\n".format(
-                        python_readable_string(x),
-                        counter
-                    ))
-                    counter += 1
-                f.write("]\n")
+            archive_result(
+                {
+                    "results" : self.results,
+                    "title" : self.title,
+                    "Time-stamp" : time_stamp()
+                },
+                self.result_file           
+            )
+            # with open(self.result_file, "w") as f:
+            #     f.write("# Output of \"{}\", generated on {}\n".format(
+            #         self.title,
+            #         datetime.datetime.now().isoformat(" ").split(".")[0]
+            #     ))
+            #     f.write("# see LogBook at {}\n".format(self.file_name))
+            #     if IS_SAGE:
+            #         f.write("from sage.all import *\n\n")
+            #     f.write("results = [\n")
+            #     counter = 0
+            #     for x in self.results:
+            #         f.write("{},    # {:d}\n".format(
+            #             python_readable_string(x),
+            #             counter
+            #         ))
+            #         counter += 1
+            #     f.write("]\n")
             self.section(2, "Results written to {}".format(
                 self.result_file
             ))
         self.save_to_file()
 
                 
-            
+
+# !SECTION! Post-processing of results
+# ====================================
+
+
+def archive_result(results, file_name):
+    # !TODO! handle the case where the `file_name` is already taken
+    with open(file_name, "wb") as f:
+        pickle.dump(results, f)
+
+
+def fetch_archive(file_name):
+    with open(file_name, "rb") as f:
+        return pickle.load(f)
         
 
-# !SECTION!  Testing Area
+# !SECTION! Testing Area
 # =======================
 
 
@@ -620,4 +649,29 @@ def test_logbook():
 # !SUBSECTION! Main program
 
 if __name__ == "__main__":
-    test_logbook()
+    # test_logbook()
+
+    with LogBook("lgbk",
+                 title="Experimenting with pickle",
+                 result_file="big.pkl",
+                 with_final_results=False
+                 ) as lgbk:
+        file_name = lgbk.result_file
+
+        # lgbk.section(2, "storing")
+        # if IS_SAGE:
+        #     X = GF(17).polynomial_ring().gen()
+        # else:
+        #     X = 47
+        # s = []
+        # for d in range(0, 100):
+        #     s.append( X**d )
+        # for k in range(0, 100, 20):
+        #     lgbk.log_result(s[k])
+        # archive_result(lgbk.results, file_name)
+        # lgbk.log_event("result stored in " + file_name)
+
+        lgbk.section(2, "grabbing")
+        s = fetch_archive(file_name)
+        for x in s.keys():
+            lgbk.log_result({x : s[x]})

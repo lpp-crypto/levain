@@ -1,6 +1,6 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-02 17:49:23 lperrin> 
+# Time-stamp: <2024-08-05 13:58:41 lperrin> 
 
 import datetime
 import sys
@@ -254,7 +254,10 @@ class LogBook:
                  print_format=None,
                  result_file=None,
                  with_time=True,
-                 with_mem=True
+                 with_mem=True,
+                 with_preamble=True,
+                 with_conclusion=True,
+                 with_final_results=False,
                  ):
         # figuring out the proper file name and inferring the
         # print_format if it is not specified
@@ -282,10 +285,14 @@ class LogBook:
             self.pretty_title = "{}\n{}\n".format(title, "="*len(title))
         else:
             raise Exception("unsuported print format: {}".format(self.print_format))
-        # initializing the state
-        self.title = title
+        # initializing parameters
         self.with_time = with_time
         self.with_mem = with_mem
+        self.with_preamble = with_preamble 
+        self.with_conclusion = with_conclusion
+        self.with_final_results = with_final_results
+        self.title = title
+        # initializing the state
         self.results = []
         self.story = []
         if self.with_mem:
@@ -377,7 +384,7 @@ class LogBook:
                                        full_event["content"]),
                     style
                 ))
-        full_event["content"] = prefix_text + full_event["content"]
+        full_event["content"] = prefix_text + str(full_event["content"])
         self.story.append(full_event)
 
 
@@ -391,18 +398,13 @@ class LogBook:
         self.log_event(pretty_result(result),
                        desc="l0")
 
+
+    # !SUBSECTION! Writing story to file 
         
     def save_to_file(self):
         with open(self.file_name, "w") as f:
             f.write("{}\n".format(self.pretty_title))
-            f.write("Experimental log generated on {}.\n".format(
-                datetime.datetime.now().strftime("%a. %b. %Y at %H:%M")
-            ))
-            f.write("We ran script {} with command line args {}.\n".format(
-                __file__,
-                sys.argv
-            ))
-            # !TODO! write the commit/branch etc. 
+            # writing the story
             for line in self.story:
                 if "type" not in line.keys():
                     raise Exception(
@@ -438,55 +440,97 @@ class LogBook:
     # !SUBSECTION!  The functions needed by the "with" logic
 
     def __enter__(self):
+        if self.verbose:
+            print("\n" + stylize(stylize(self.title, "bold"), "underline") + "\n")
+        # handling the preamble (if relevant)
+        if self.with_preamble:
+            self.section(1, "Preamble")
+            self.log_event(
+                "Experimental log started on {}.".format(
+                    datetime.datetime.now().strftime("%a. %b. %Y at %H:%M")
+                ),
+                desc="l*"
+            )
+            self.log_event(
+                "Running script {} with command line args {}.".format(
+                    __file__,
+                    sys.argv
+                ),
+                desc="l*"
+            )
+            try:
+                # try to use GitPython to find a parent directory with
+                # a git folder
+                from git import Repo
+                commit = Repo(".", search_parent_directories=True).commit()
+                self.log_event(
+                    "The working directory is at commit {}.".format(commit),
+                    desc="l*"
+                )
+            except:
+                self.log_fail("No git information to write.")
+            self.section(1, "Experiment")
+        # initializing measurements
         if self.with_time:
             self.start_time = datetime.datetime.now()
         if self.with_mem:
             self.mem_tracer.start()
-        if self.verbose:
-            print("\n" + stylize(stylize(self.title, "bold"), "underline"))
         return self
     
 
     def __exit__(self, *args):
-        self.section(1, "Finished")
-        if self.with_time or self.with_mem:
-            self.section(2, "Performances")
-        # handling time complexity
-        if self.with_time:
-            elapsed_time = datetime.datetime.now() - self.start_time
-            tot_secs = floor(elapsed_time.total_seconds())
-            days = floor(tot_secs / 86400)
-            hours = floor((tot_secs % 86400) / 3600)
-            minutes = floor((tot_secs % 3600) / 60)
-            seconds = (tot_secs % 60) + elapsed_time.total_seconds() - tot_secs
-            elapsed_time_description = "elapsed time: {}s ({})".format(
-                elapsed_time.total_seconds(),
-                "{:d}d {:02d}h {:02d}m {:5.03f}s".format(
-                    days,
-                    hours,
-                    minutes,
-                    seconds
-            ))
-            self.log_event(elapsed_time_description, desc="l*")
-        # handling memory complexity
-        if self.with_mem:       
-            memory_size, memory_peak = self.mem_tracer.get_traced_memory()
-            self.mem_tracer.stop()
-            if memory_peak > 1024**3:
-                pretty_peak = "(= {:.2f}GB)".format(memory_peak / 1024**3)
-            elif memory_peak > 1024**2:
-                pretty_peak = "(= {:.2f}MB)".format(memory_peak / 1024**2)
-            elif memory_peak > 1024:
-                pretty_peak = "(= {:.2f}kB)".format(memory_peak / 1024)
+        if self.with_conclusion:
+            self.section(1, "Conclusion")
+            if self.with_time or self.with_mem:
+                self.section(2, "Performances")
+            # handling time complexity
+            if self.with_time:
+                elapsed_time = datetime.datetime.now() - self.start_time
+                tot_secs = floor(elapsed_time.total_seconds())
+                days = floor(tot_secs / 86400)
+                hours = floor((tot_secs % 86400) / 3600)
+                minutes = floor((tot_secs % 3600) / 60)
+                seconds = (tot_secs % 60) + elapsed_time.total_seconds() - tot_secs
+                elapsed_time_description = "elapsed time: {}s ({})".format(
+                    elapsed_time.total_seconds(),
+                    "{:d}d {:02d}h {:02d}m {:5.03f}s".format(
+                        days,
+                        hours,
+                        minutes,
+                        seconds
+                ))
+                self.log_event(elapsed_time_description, desc="l*")
+            # handling memory complexity
+            if self.with_mem:       
+                memory_size, memory_peak = self.mem_tracer.get_traced_memory()
+                self.mem_tracer.stop()
+                if memory_peak > 1024**3:
+                    pretty_peak = "(= {:.2f}GB)".format(memory_peak / 1024**3)
+                elif memory_peak > 1024**2:
+                    pretty_peak = "(= {:.2f}MB)".format(memory_peak / 1024**2)
+                elif memory_peak > 1024:
+                    pretty_peak = "(= {:.2f}kB)".format(memory_peak / 1024)
+                else:
+                    pretty_peak = ""
+                memory_description = "peak memory usage: {}B {}".format(
+                    memory_peak,
+                    pretty_peak
+                )
+                self.log_event(memory_description, desc="l*")
+            # handling results in the logbook itself
+            if len(self.results) == 0:
+                results_description = "no results found"
             else:
-                pretty_peak = ""
-            memory_description = "peak memory usage: {}B {}".format(
-                memory_peak,
-                pretty_peak
-            )
-            self.log_event(memory_description, desc="l*")
-        # handling results
-        # -- in the separated file (if relevant)
+                results_description = "{:d} result(s) found".format(len(self.results))
+                self.section(2, results_description)
+                if self.with_final_results:
+                    for res in self.results:
+                        self.log_event(pretty_result(res), desc="n*")
+    
+    
+        # !TODO! refactor this function to call
+        # !`save_data_as_py_module`, a function doing the same thing
+        # !outside of this class that could be called on its own
         if self.result_file != None and len(self.results) > 0:
             with open(self.result_file, "w") as f:
                 f.write("# Output of \"{}\", generated on {}\n".format(
@@ -508,27 +552,32 @@ class LogBook:
             self.section(2, "Results written to {}".format(
                 self.result_file
             ))
-        # -- in the logbook itself
-        if len(self.results) == 0:
-            results_description = "no results found"
-        else:
-            results_description = "{:d} result(s) found".format(len(self.results))
-            self.section(2, results_description)
-            for res in self.results:
-                self.log_event(pretty_result(res), desc="n*")
         self.save_to_file()
 
                 
             
         
 
-# !SECTION!  Main program testing the LogBook class
+# !SECTION!  Testing Area
+# =======================
 
-if __name__ == "__main__":
+
+# !SUBSECTION! Small tests
+
+def test_colors():
+    for k in T_COLORS.keys():
+        if k != "endcol":
+            print(T_COLORS[k] + k + T_COLORS["endcol"])
+
+
+# !SUBSECTION! Testing the LogBook class
+
+def test_logbook():
     # generating a dummy logbook
     with LogBook("lgbk.org",
                  verbose=True,
                  result_file="res.py",
+                 title="Testing the LogBook class"
                  ) as lgbk:
 
         lgbk.section(1, "starting up")
@@ -563,10 +612,12 @@ if __name__ == "__main__":
         else:
             lgbk.log_result([[0, 1], [2,300000]])
         
-    # testing reimport of the results
-    import res
-    print(res.results)
-    for k in T_COLORS.keys():
-        if k != "endcol":
-            print(T_COLORS[k] + k + T_COLORS["endcol"])
+    # # testing reimport of the results
+    # import res
+    # print(res.results)
 
+
+# !SUBSECTION! Main program
+
+if __name__ == "__main__":
+    test_logbook()

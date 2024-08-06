@@ -1,6 +1,6 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-05 17:31:52 lperrin> 
+# Time-stamp: <2024-08-06 15:14:46 lperrin> 
 
 import datetime
 import sys
@@ -653,10 +653,10 @@ if __name__ == "__main__":
 
     with LogBook("lgbk",
                  title="Experimenting with pickle",
-                 result_file="big.pkl",
+                 # result_file="big.pkl",
                  with_final_results=False
                  ) as lgbk:
-        file_name = lgbk.result_file
+        file_name = "big.pkl"
 
         # lgbk.section(2, "storing")
         # if IS_SAGE:
@@ -673,5 +673,6 @@ if __name__ == "__main__":
 
         lgbk.section(2, "grabbing")
         s = fetch_archive(file_name)
-        for x in s.keys():
-            lgbk.log_result({x : s[x]})
+        print(s)
+        for x in s:
+            lgbk.log_result(x)

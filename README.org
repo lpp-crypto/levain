@@ -1,6 +1,6 @@
 #+TITLE: Levain
 #+DESCRIPTION: Python/SAGE classes, LaTeX macros files, file/project templates, and all the small stuff I regularly need to use or copy/paste into my work as researcher 
-# Time-stamp: <2024-08-02 16:16:41 lperrin>
+# Time-stamp: <2024-08-07 17:43:20 lperrin>
 
 
 The purpose of this repository is to store (both for me and for
@@ -14,10 +14,18 @@ hesitate to tell me about it!
 
 * Python Utils
 The =py= folder contains several python classes that help me when
-running some experiments in Python (or, most often SAGE):
-- =prg= :: a small SHA-256 based deterministic PRNG. It provides
+running some experiments in Python (or, most often SAGE). Some of the
+code is written in C++, so it must be compiled with
+#+BEGIN_SRC
+  sage setup.py build_ext --inplace
+#+END_SRC
+Here are the modules it provides:
+- =prg= :: a small SPARKLE512-based deterministic PRNG. It provides
   hopefully high-quality random outputs, and its seed must be set by
   hand which helps with reproducibility.
+
+  It is implemented in C++ and doesn't seem to bring any time
+  complexity penaly compared e.g. to =random.randint=.
 - =LogBook= :: an easy to use class that helps me generate
   experimental results that are in a usable form: as a human readable
   report (in the terminal and/or in a file), and as an importable

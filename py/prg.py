@@ -1,6 +1,6 @@
-#!/usr/bin/python3
+#!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-07 15:06:22 lperrin>
+# Time-stamp: <2024-08-07 17:43:50 lperrin>
 
 
 import hashlib
@@ -11,79 +11,34 @@ import ctypes
 from math import log, ceil
 from copy import copy
 
-
-class SimplifiedSparkle512:
-    def __init__(self, n_rounds=4):
-        self.perm = ctypes.CDLL('./sparkle.so').sparkle_512_permutation
-        zeroes = [ctypes.c_uint32(0)]*16
-        self.state = (ctypes.c_uint32 * 16)(*zeroes)
-        self.n_rounds = n_rounds
-        self.rate = 32          # eight 32-bit words, so 32 bytes
-
-    def absorb(self, x):
-        if len(x) >= self.rate:
-            raise Exception("Trying to absorb too big a chunk")
-        x += bytearray([0] * (self.rate - len(x))) # padding with 0
-        for i in range(0, len(x) >> 2):
-            y_i = 0
-            for j in range(0, 4):
-                y_i = (y_i << 8) | x[4*i + j]
-            self.state[i] = self.state[i] ^ y_i
-        self.iterate()
-
-    def iterate(self):
-        self.state = (ctypes.c_uint32 * 16)(*self.state)
-        self.perm(self.state, self.n_rounds)
-        
-    def squeeze(self):
-        result = []
-        for x in self.state:
-            x_i = x
-            for i in range(0, 4):
-                result.append(x_i & 0xFF)
-                x_i = x_i >> 8
-        return result
-        
+from cpputils import *
 
 
-
-# !TODO! rewrite documentation to use SPARKLE instead of SHA512
-
-# !TODO! write a dedicated C++ class called SPARKLE_EDF, and let
-# !ReproduciblePRG be a simple wrapper for it.
+# !TODO! rewrite documentation to take into account the move to SPARKLE512
 
 # !TODO! allow outputting random functions and random permutations 
 
 class ReproduciblePRG:
-    """A simple pseudo random number generator based on hashing an
-    increasing counter using SHA512, the state of the hash function
-    being initialized with the seed.
+    """A simple pseudo random number generator based on a simplified
+    version of SPARKLE512 (fewer rounds, bigger rate).
 
     """
     def __init__(self, seed):
-        """We initialize the state of a SHA512 instance with the given
-        seed. This is a deterministic procedure.
-
-        The hash function can be specified using the
-        `hash_state`. SHA512 was experimentally found to yield
-        marginally faster ReproduciblePRG instances.
+        """Initializing the SPARKLE-based PRNG
 
         """
-        self.state = SimplifiedSparkle512(n_rounds=4)
+        self.edf = PySparkle512EDF()
         self.seed = []
         self.reseed(seed)
-        self.masks = [int(1 << i)-1 for i in range(0, 8)]
 
     def reseed(self, seed):
-        self.entropy_reserve = []
-        self.cursor = 2**30
         if isinstance(seed, list):
             self.seed += seed
             for x in seed:
-                self.state.absorb(x)
+                self.edf.absorb(x)
         else:
             self.seed.append(seed)
-            self.state.absorb(seed)
+            self.edf.absorb(seed)
         
 
     def reseed_from_time_and_pid(self):
@@ -104,29 +59,6 @@ class ReproduciblePRG:
         ]
         self.reseed(blocks)
         return blocks
-    
-
-    def _get_next_byte(self):
-        """An inner routine returning a single pseudo-random byte.
-
-        Either pops such a byte from the self.entropy_reserve, or if
-        its empty then:
-
-        1. increases the internal counter,
-
-        2. copies the main state, absorbs the new counter, and sets
-        the new self.entropy_reserve to be the digest obtained.
-
-        """
-        if self.cursor >= len(self.entropy_reserve):
-            # if the content is empty, we update the state
-            self.state.iterate()
-            self.entropy_reserve = self.state.squeeze()
-            self.cursor = 0
-        output = self.entropy_reserve[self.cursor]
-        self.cursor += 1
-        return output
-        
         
         
     def __call__(self,
@@ -147,14 +79,9 @@ class ReproduciblePRG:
                     upper_bound,
                     lower_bound
                 ))
-        reachable_bound = 1
-        alea = 0
-        value_range = int(upper_bound - lower_bound)
-        n_bits = ceil(log(value_range, 2))
-        while n_bits >= 8:
-            alea = int((alea << 8) | self._get_next_byte())
-            n_bits -= 8
-        alea = (alea << n_bits) | (self._get_next_byte() & self.masks[n_bits])
+        value_range = upper_bound - lower_bound
+        bit_length = ceil(log(value_range, 2))
+        alea = self.edf.get_n_bit_unsigned_integer(bit_length)
         potential_output = lower_bound + alea
         # rejection sampling
         if potential_output < upper_bound:
@@ -165,8 +92,7 @@ class ReproduciblePRG:
 
 
     def __str__(self):
-        return "ReproduciblePRG using SPARKLE512 with {} rounds and seeded with {}".format(
-            self.state.n_rounds,
+        return "ReproduciblePRG using simplified SPARKLE512 seeded with {}".format(
             self.seed
         )
 
@@ -214,19 +140,17 @@ def test_speed_and_bounds():
 if __name__ == "__main__":
     from logbook import LogBook
 
-    # with LogBook("ctypes for sparkle",
-    #              title="Playing with ctypes",
+    # with LogBook("logbooks/replicability",
+    #              title="Testing Replicability of CYTHON/SPARKLE-based PRNG",
     #              with_final_results=False) as lgbk:
-    #     sparkle = ctypes.CDLL('./sparkle.so')
-    #     lgbk.log_event(sparkle)
-    #     lgbk.log_event(dir(sparkle))
-    #     zeroes = [0]*16
-    #     state = (ctypes.c_uint32 * 16)(*zeroes)
-    #     lgbk.log_event({"before" : state})
-    #     sparkle.sparkle_512_permutation(state, 3)
-    #     lgbk.log_event({"after " : state})
-    #     for x in state:
-    #         lgbk.log_result("{:08x}".format(x))
+    #     for run in [0, 1]:
+    #         lgbk.section(1, "run {}".format(run))
+    #         sp = PySparkle512EDF()
+    #         lgbk.log_event("successful instantiation")
+    #         sp.absorb(b"1")
+    #         lgbk.log_event("successful absorption")
+    #         for i in range(3, 45):
+    #             lgbk.log_result(hex(sp.get_n_bit_unsigned_integer(i)))
         
 
     test_speed_and_bounds()

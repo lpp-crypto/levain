@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #-*- Python -*-
-# Time-stamp: <2024-08-07 14:28:55 lperrin>
+# Time-stamp: <2024-08-07 15:06:22 lperrin>
 
 
 import hashlib
@@ -47,7 +47,13 @@ class SimplifiedSparkle512:
 
 
 
-# !TODO! rewrite documentation to use SPARKLE instead of SHA512 
+# !TODO! rewrite documentation to use SPARKLE instead of SHA512
+
+# !TODO! write a dedicated C++ class called SPARKLE_EDF, and let
+# !ReproduciblePRG be a simple wrapper for it.
+
+# !TODO! allow outputting random functions and random permutations 
+
 class ReproduciblePRG:
     """A simple pseudo random number generator based on hashing an
     increasing counter using SHA512, the state of the hash function

@@ -1,24 +1,60 @@
 #!/usr/bin/python3
 #-*- Python -*-
-# Time-stamp: <2024-08-06 17:12:42 lperrin>
+# Time-stamp: <2024-08-07 14:28:55 lperrin>
 
 
 import hashlib
 import time
 import os
+import ctypes
 
 from math import log, ceil
+from copy import copy
+
+
+class SimplifiedSparkle512:
+    def __init__(self, n_rounds=4):
+        self.perm = ctypes.CDLL('./sparkle.so').sparkle_512_permutation
+        zeroes = [ctypes.c_uint32(0)]*16
+        self.state = (ctypes.c_uint32 * 16)(*zeroes)
+        self.n_rounds = n_rounds
+        self.rate = 32          # eight 32-bit words, so 32 bytes
+
+    def absorb(self, x):
+        if len(x) >= self.rate:
+            raise Exception("Trying to absorb too big a chunk")
+        x += bytearray([0] * (self.rate - len(x))) # padding with 0
+        for i in range(0, len(x) >> 2):
+            y_i = 0
+            for j in range(0, 4):
+                y_i = (y_i << 8) | x[4*i + j]
+            self.state[i] = self.state[i] ^ y_i
+        self.iterate()
+
+    def iterate(self):
+        self.state = (ctypes.c_uint32 * 16)(*self.state)
+        self.perm(self.state, self.n_rounds)
+        
+    def squeeze(self):
+        result = []
+        for x in self.state:
+            x_i = x
+            for i in range(0, 4):
+                result.append(x_i & 0xFF)
+                x_i = x_i >> 8
+        return result
+        
 
 
 
-
+# !TODO! rewrite documentation to use SPARKLE instead of SHA512 
 class ReproduciblePRG:
     """A simple pseudo random number generator based on hashing an
-    increasing counter using SHA256, the state of the hash function
+    increasing counter using SHA512, the state of the hash function
     being initialized with the seed.
 
     """
-    def __init__(self, seed, hash_state=hashlib.sha512):
+    def __init__(self, seed):
         """We initialize the state of a SHA512 instance with the given
         seed. This is a deterministic procedure.
 
@@ -27,20 +63,21 @@ class ReproduciblePRG:
         marginally faster ReproduciblePRG instances.
 
         """
-        self.state = hash_state()
+        self.state = SimplifiedSparkle512(n_rounds=4)
+        self.seed = []
         self.reseed(seed)
         self.masks = [int(1 << i)-1 for i in range(0, 8)]
 
     def reseed(self, seed):
-        self.counter = 0
         self.entropy_reserve = []
         self.cursor = 2**30
-        self.seed = seed
         if isinstance(seed, list):
+            self.seed += seed
             for x in seed:
-                self.state.update(x)
+                self.state.absorb(x)
         else:
-            self.state.update(seed)
+            self.seed.append(seed)
+            self.state.absorb(seed)
         
 
     def reseed_from_time_and_pid(self):
@@ -76,11 +113,9 @@ class ReproduciblePRG:
 
         """
         if self.cursor >= len(self.entropy_reserve):
-            # if the content is empty, we absorb a new counter
-            self.counter += 1
-            tmp = self.state.copy()
-            tmp.update(self.counter.to_bytes(16, "little"))
-            self.entropy_reserve = tmp.digest()
+            # if the content is empty, we update the state
+            self.state.iterate()
+            self.entropy_reserve = self.state.squeeze()
             self.cursor = 0
         output = self.entropy_reserve[self.cursor]
         self.cursor += 1
@@ -124,28 +159,34 @@ class ReproduciblePRG:
 
 
     def __str__(self):
-        return "ReproduciblePRG using {} and seeded with {}".format(
-            self.state.name,
+        return "ReproduciblePRG using SPARKLE512 with {} rounds and seeded with {}".format(
+            self.state.n_rounds,
             self.seed
         )
 
 
-if __name__ == "__main__":
-    from logbook import LogBook
+# !SECTION! Tests
+# ===============
 
-    
-    with LogBook("prg_test_sha256",
+
+def test_speed_and_bounds():
+    with LogBook("prg_test_sparkle",
                  title="Testing ReproduciblePRG",
                  with_final_results=False) as lgbk:
-        prg = ReproduciblePRG([b"blabli", b"blu"],
-                              hash_state=hashlib.sha512)
+        prg = ReproduciblePRG([b"blabli", b"blu"])
         lgbk.log_event("Succesfull initialization")
         lgbk.log_event(prg)
         s = 0
         success_counter = 0
+
+        # import random
+        # prg = random.randint
+        
         for i in range(1, 2**15):
             lower = i
-            upper = prg(2**20, 2**40) + prg(100)
+            upper = prg(2**20, 2**40) + prg(0, 100)
+            # lower = 0 + prg(0, 256)
+            # upper = 2**20 - prg(0, 256)
             r = [
                 prg(lower, upper)
                 for j in range(0, 10)
@@ -162,3 +203,24 @@ if __name__ == "__main__":
             s += r[0]
         lgbk.log_result(s % 1000)
         lgbk.log_result({"successes" : success_counter})
+
+
+if __name__ == "__main__":
+    from logbook import LogBook
+
+    # with LogBook("ctypes for sparkle",
+    #              title="Playing with ctypes",
+    #              with_final_results=False) as lgbk:
+    #     sparkle = ctypes.CDLL('./sparkle.so')
+    #     lgbk.log_event(sparkle)
+    #     lgbk.log_event(dir(sparkle))
+    #     zeroes = [0]*16
+    #     state = (ctypes.c_uint32 * 16)(*zeroes)
+    #     lgbk.log_event({"before" : state})
+    #     sparkle.sparkle_512_permutation(state, 3)
+    #     lgbk.log_event({"after " : state})
+    #     for x in state:
+    #         lgbk.log_result("{:08x}".format(x))
+        
+
+    test_speed_and_bounds()

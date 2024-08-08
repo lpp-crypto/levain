@@ -1,6 +1,6 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-07 17:43:50 lperrin>
+# Time-stamp: <2024-08-08 17:24:29 leo>
 
 
 import hashlib
@@ -11,7 +11,7 @@ import ctypes
 from math import log, ceil
 from copy import copy
 
-from cpputils import *
+from .cpputils import *
 
 
 # !TODO! rewrite documentation to take into account the move to SPARKLE512

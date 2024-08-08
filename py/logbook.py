@@ -1,6 +1,6 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-08 11:39:46 lperrin> 
+# Time-stamp: <2024-08-08 17:27:05 leo> 
 
 import datetime
 import sys
@@ -305,7 +305,8 @@ class LogBook:
             self.mem_tracer = tracemalloc
         self.enum_counter = None
         self.display = print
-        self.old_print = print
+        global old_print
+        old_print = print
         
 
     # !SUBSECTION! Logging events and results
@@ -560,8 +561,8 @@ class LogBook:
                 self.result_file
             ))
         self.save_to_file()
-        global print
-        print = self.old_print
+        global print, old_print
+        print = old_print
 
                 
 

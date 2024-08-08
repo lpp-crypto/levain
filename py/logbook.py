@@ -1,6 +1,6 @@
 #!/usr/bin/sage
 #-*- Python -*-
-# Time-stamp: <2024-08-06 15:14:46 lperrin> 
+# Time-stamp: <2024-08-08 11:39:46 lperrin> 
 
 import datetime
 import sys
@@ -172,6 +172,9 @@ def python_readable_string(y):
 
 # !SECTION! The LogBook class
 
+# !TODO! update documentation to take new interface into account:
+# !replacing `print`, and providing high level functions (SECTION,
+# !etc).
 class LogBook:
     """A class helping with keeping track of the data generated while
     a script is running.
@@ -256,10 +259,9 @@ class LogBook:
     # !SUBSECTION! Initialization
     
     def __init__(self,
-                 file_name,
-                 title="Experiment",
+                 title,
                  verbose=True,
-                 print_format=None,
+                 print_format="org",
                  result_file=None,
                  with_time=True,
                  with_mem=True,
@@ -270,19 +272,14 @@ class LogBook:
         # figuring out the proper file name and inferring the
         # print_format if it is not specified
         self.result_file = result_file
-        if print_format == None:
-            if file_name[-2:] == "md":
-                self.print_format = "md"
-            else:
-                self.print_format = "org"
-        else:
-            self.print_format = "md" # defaulting to markdown
-        self.file_name = file_name
-        if self.file_name[-len(self.print_format)-1:] != "."+self.print_format:
-            self.file_name += "." + self.print_format
+        self.file_name = "logbooks/{} {}.{}".format(
+            time_stamp(),
+            title,
+            print_format).replace(" ", "_")
         # setting up displaying infrastructure
         self.verbose = verbose
         self.current_toc_depth = 0
+        self.print_format = print_format
         if self.print_format == "org":
             self.headings = lambda depth : "*" * depth
             self.bullet = "-"
@@ -307,7 +304,9 @@ class LogBook:
             import tracemalloc
             self.mem_tracer = tracemalloc
         self.enum_counter = None
-
+        self.display = print
+        self.old_print = print
+        
 
     # !SUBSECTION! Logging events and results
     
@@ -326,10 +325,10 @@ class LogBook:
             line = stylize(line, "purple")
             if depth == 1:
                 line = stylize(line, "bold")
-            print(line)
+            self.display(line)
         
         
-    def log_event(self, event, desc="l"):
+    def log_event(self, event, desc="t"):
         tstamp = time_stamp()
         full_event = {"content": event}
         # do we need the time-stamp?
@@ -358,7 +357,7 @@ class LogBook:
             self.enum_counter = None # stopping an enumeration (if any)
             full_event["type"] = "list"
             if self.verbose:
-                print(stylize(
+                self.display(stylize(
                     "{} {} {}{} {}".format(INDENT * self.current_toc_depth,
                                            self.bullet,
                                            full_event["tstamp"],
@@ -373,7 +372,7 @@ class LogBook:
                 self.enum_counter += 1
             full_event["type"] = "enum" + str(self.enum_counter)
             if self.verbose:
-                print(stylize(
+                self.display(stylize(
                     "{} {}.{}{} {}".format(INDENT * self.current_toc_depth,
                                            self.enum_counter,
                                            full_event["tstamp"],
@@ -385,7 +384,7 @@ class LogBook:
             self.enum_counter = None # stopping an enumeration (if any)
             full_event["type"] = "text"
             if self.verbose:
-                print(stylize(
+                self.display(stylize(
                     "{} {}{}{}".format(INDENT * self.current_toc_depth,
                                        full_event["tstamp"],
                                        prefix_terminal,
@@ -398,11 +397,16 @@ class LogBook:
 
             
     def log_result(self, result):
+        # !TODO! change log_result to `store`
         self.results.append(result)
         self.log_event(pretty_result(result),
                        desc="l1")
-            
+
+    # !TODO! add a `log_success ` method
+        
     def log_fail(self, result):
+        # !TODO! handle absence of input, and add a fail_counter
+        # !attribute
         self.log_event(pretty_result(result),
                        desc="l0")
 
@@ -449,7 +453,7 @@ class LogBook:
 
     def __enter__(self):
         if self.verbose:
-            print("\n" + stylize(stylize(self.title, "bold"), "underline") + "\n")
+            self.display("\n" + stylize(stylize(self.title, "bold"), "underline") + "\n")
         # handling the preamble (if relevant)
         if self.with_preamble:
             self.section(1, "Preamble")
@@ -477,12 +481,20 @@ class LogBook:
                 )
             except:
                 self.log_fail("No git information to write.")
+            self.log_event("logbook saved in " + self.file_name,
+                           desc="l*")
             self.section(1, "Experiment starts now")
         # initializing measurements
         if self.with_time:
             self.start_time = datetime.datetime.now()
         if self.with_mem:
             self.mem_tracer.start()
+        # declaring all useful functions
+        global SECTION, SUBSECTION, SUBSUBSECTION, print
+        print         = self.log_event
+        SECTION       = lambda x : self.section(1, x)
+        SUBSECTION    = lambda x : self.section(2, x)
+        SUBSUBSECTION = lambda x : self.section(3, x)
         return self
     
 
@@ -534,13 +546,9 @@ class LogBook:
                 if self.with_final_results:
                     for res in self.results:
                         self.log_event(pretty_result(res), desc="n*")
-    
-    
-        # !TODO! refactor this function to call
-        # !`save_data_as_py_module`, a function doing the same thing
-        # !outside of this class that could be called on its own
+        # storing the results
         if self.result_file != None and len(self.results) > 0:
-            archive_result(
+            archive_basket(
                 {
                     "results" : self.results,
                     "title" : self.title,
@@ -548,27 +556,12 @@ class LogBook:
                 },
                 self.result_file           
             )
-            # with open(self.result_file, "w") as f:
-            #     f.write("# Output of \"{}\", generated on {}\n".format(
-            #         self.title,
-            #         datetime.datetime.now().isoformat(" ").split(".")[0]
-            #     ))
-            #     f.write("# see LogBook at {}\n".format(self.file_name))
-            #     if IS_SAGE:
-            #         f.write("from sage.all import *\n\n")
-            #     f.write("results = [\n")
-            #     counter = 0
-            #     for x in self.results:
-            #         f.write("{},    # {:d}\n".format(
-            #             python_readable_string(x),
-            #             counter
-            #         ))
-            #         counter += 1
-            #     f.write("]\n")
             self.section(2, "Results written to {}".format(
                 self.result_file
             ))
         self.save_to_file()
+        global print
+        print = self.old_print
 
                 
 
@@ -576,13 +569,14 @@ class LogBook:
 # ====================================
 
 
-def archive_result(results, file_name):
-    # !TODO! handle the case where the `file_name` is already taken
+# !TODO! store baskets in a dedicated folder, and add a high-level
+# !script to dump their content. We need a post-processing module.
+def archive_basket(results, file_name):
     with open(file_name, "wb") as f:
         pickle.dump(results, f)
 
 
-def fetch_archive(file_name):
+def fetch_basket(file_name):
     with open(file_name, "rb") as f:
         return pickle.load(f)
         
@@ -603,76 +597,75 @@ def test_colors():
 
 def test_logbook():
     # generating a dummy logbook
-    with LogBook("lgbk.org",
-                 verbose=True,
-                 result_file="res.py",
-                 title="Testing the LogBook class"
-                 ) as lgbk:
+    with LogBook("Testing the LogBook class"):# as lgbk:
 
-        lgbk.section(1, "starting up")
-        lgbk.log_event("bli", desc="t*")
+        SECTION("starting up")
+        print("bli", desc="t*")
 
-        lgbk.section(2, "doing useless enumerations")
+        SUBSECTION("doing useless enumerations")
         for i in range(0, 4):
-            lgbk.log_event("a useless enumeration ({})".format(i), desc="n*")
-        lgbk.log_event("and I cut the enumeration...", desc="t")
-        lgbk.log_event("...and I put back the enumeration!", desc="t")
+            print("a useless enumeration ({})".format(i), desc="n*")
+        print("and I cut the enumeration...", desc="t")
+        print("...and I put back the enumeration!", desc="t")
         for i in range(0, 4):
-            lgbk.log_event("another useless enumeration ({})".format(i), desc="n*")
+            print("another useless enumeration ({})".format(i), desc="n*")
 
-        lgbk.section(2, "a second subheading")
-        lgbk.log_event("plain text line", desc="t*")
-        lgbk.log_event("plain text line with time-stamp", desc="t")
+        SUBSECTION("a second subheading")
+        print("plain text line", desc="t*")
+        print("plain text line with time-stamp", desc="t")
         
-        lgbk.section(1, "moving on to pointless computations")
-        blu = []
-        for x in range(0, 2**5):
-            blu.append(x**3)
-        lgbk.log_result(sum(blu))
-        lgbk.log_result({
-            "sum of cubes": sum(x**3 for x in blu),
-            "sum of squares": sum(x**2 for x in blu)
-        })
-        for x in range(0, 4):
-            lgbk.log_result({"padding" : x})
-        lgbk.log_fail("a failure")
-        if IS_SAGE:
-            lgbk.log_result(Matrix([[0, 1], [2,300000]]))
-        else:
-            lgbk.log_result([[0, 1], [2,300000]])
+        SECTION("moving on to pointless computations")
+        
+        # blu = []
+        # for x in range(0, 2**5):
+        #     blu.append(x**3)
+        # lgbk.log_result(sum(blu))
+        # lgbk.log_result({
+        #     "sum of cubes": sum(x**3 for x in blu),
+        #     "sum of squares": sum(x**2 for x in blu)
+        # })
+        # for x in range(0, 4):
+        #     lgbk.log_result({"padding" : x})
+        # lgbk.log_fail("a failure")
+        # if IS_SAGE:
+        #     lgbk.log_result(Matrix([[0, 1], [2,300000]]))
+        # else:
+        #     lgbk.log_result([[0, 1], [2,300000]])
         
     # # testing reimport of the results
     # import res
     # print(res.results)
+    print("printing should now be normal", " and thus handle ",
+          3, "or more variadic inputs")
 
 
 # !SUBSECTION! Main program
 
 if __name__ == "__main__":
-    # test_logbook()
+    test_logbook()
 
-    with LogBook("lgbk",
-                 title="Experimenting with pickle",
-                 # result_file="big.pkl",
-                 with_final_results=False
-                 ) as lgbk:
-        file_name = "big.pkl"
+    # with LogBook("lgbk",
+    #              title="Experimenting with pickle",
+    #              # result_file="big.pkl",
+    #              with_final_results=False
+    #              ) as lgbk:
+    #     file_name = "big.pkl"
 
-        # lgbk.section(2, "storing")
-        # if IS_SAGE:
-        #     X = GF(17).polynomial_ring().gen()
-        # else:
-        #     X = 47
-        # s = []
-        # for d in range(0, 100):
-        #     s.append( X**d )
-        # for k in range(0, 100, 20):
-        #     lgbk.log_result(s[k])
-        # archive_result(lgbk.results, file_name)
-        # lgbk.log_event("result stored in " + file_name)
+    #     # lgbk.section(2, "storing")
+    #     # if IS_SAGE:
+    #     #     X = GF(17).polynomial_ring().gen()
+    #     # else:
+    #     #     X = 47
+    #     # s = []
+    #     # for d in range(0, 100):
+    #     #     s.append( X**d )
+    #     # for k in range(0, 100, 20):
+    #     #     lgbk.log_result(s[k])
+    #     # archive_result(lgbk.results, file_name)
+    #     # lgbk.log_event("result stored in " + file_name)
 
-        lgbk.section(2, "grabbing")
-        s = fetch_archive(file_name)
-        print(s)
-        for x in s:
-            lgbk.log_result(x)
+    #     lgbk.section(2, "grabbing")
+    #     s = fetch_archive(file_name)
+    #     print(s)
+    #     for x in s:
+    #         lgbk.log_result(x)

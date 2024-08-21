@@ -1,5 +1,5 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-08-20 17:32:32 lperrin>
+#+Time-stamp: <2024-08-21 18:01:13 lperrin>
 
 
 * Design Approach
@@ -456,7 +456,7 @@ for n in range(0, 64):
     ))
 #+END_SRC
 
-Here is the result (obvious, a nice looking org-table!):
+Here is the result (obviously, a nice looking org-table!):
 
 | # perm |  n |             output | HW | length deficit |
 |--------+----+--------------------+----+----------------|

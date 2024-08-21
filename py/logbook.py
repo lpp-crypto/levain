@@ -1,11 +1,13 @@
-#!/usr/bin/sage
+#!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-08-21 16:11:11 lperrin> 
+# Time-stamp: <2024-08-21 17:25:22 lperrin> 
 
 import datetime
 import sys
 import os
 import pickle
+import re
+import sys
 
 from collections import defaultdict
 
@@ -521,7 +523,7 @@ class LogBook:
                 )
             except:
                 self.log_fail("No git information to write.")
-            self.log_event("logbook saved in " + self.file_name,
+            self.log_event("logbook to be saved in " + self.file_name,
                            desc="l*")
             self.section(1, "Experiment starts now")
         # initializing measurements
@@ -612,6 +614,7 @@ class LogBook:
         if len(self.basket.keys()) > 0:
             self.basket["title"] = self.title
             self.basket["finished at"] = time_stamp()
+            self.basket["file name"] = self.basket_file
             archive_basket(self.basket, self.basket_file)
             self.section(2, "Basket written to {}".format(
                 self.basket_file
@@ -632,17 +635,37 @@ def archive_basket(results, file_name):
     with open(file_name, "wb") as f:
         pickle.dump(results, f)
 
-
-def grab_basket(file=None):
-    if file == None:
-        try:
-            basket_list = os.listdir("./baskets")
-        except:
-            raise Exception("could not open ./baskets directory!")
-        file = "./baskets/" + basket_list[-1]
+def open_basket(file):
     with open(file, "rb") as f:
         return pickle.load(f)
-        
+
+
+def grab_last_basket(*args):
+    filters = []
+    for x in args:
+        if isinstance(x, list):
+            filters += x
+        else:
+            filters.append(x)
+    try:
+        basket_list = os.listdir("./baskets")
+    except:
+        raise Exception("could not open ./baskets directory!")
+    if len(filters) == 0:
+        # default case: we grab the latest
+        return open_basket("./baskets/" + basket_list[-1])
+    else:
+        # otherwise, we grab the first that matches all the inputs
+        for name in reversed(basket_list):
+            good = True
+            for x in filters:
+                if not re.search(x, name):
+                    good = False
+                    break
+            if good:
+                return open_basket("./baskets/" + name)
+    raise Exception("Could not find a basket matching ", filters)
+
 
 # !SECTION! Testing Area
 # =======================
@@ -698,30 +721,7 @@ def test_logbook():
 # !SUBSECTION! Main program
 
 if __name__ == "__main__":
-    test_logbook()
-
-    # with LogBook("lgbk",
-    #              title="Experimenting with pickle",
-    #              # result_file="big.pkl",
-    #              with_final_results=False
-    #              ) as lgbk:
-    #     file_name = "big.pkl"
-
-    #     # lgbk.section(2, "storing")
-    #     # if IS_SAGE:
-    #     #     X = GF(17).polynomial_ring().gen()
-    #     # else:
-    #     #     X = 47
-    #     # s = []
-    #     # for d in range(0, 100):
-    #     #     s.append( X**d )
-    #     # for k in range(0, 100, 20):
-    #     #     lgbk.log_result(s[k])
-    #     # archive_result(lgbk.results, file_name)
-    #     # lgbk.log_event("result stored in " + file_name)
-
-    #     lgbk.section(2, "grabbing")
-    #     s = fetch_archive(file_name)
-    #     print(s)
-    #     for x in s:
-    #         lgbk.log_result(x)
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "grab":
+            d = grab_last_basket(sys.argv[2:])
+            print(d)

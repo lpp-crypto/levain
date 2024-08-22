@@ -1,5 +1,5 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-08-22 17:47:43 leo>
+#+Time-stamp: <2024-08-22 18:54:24 leo>
 
 
 #+OPTIONS: html-style:nil toc:2 num:t
@@ -36,7 +36,13 @@
 * Design Approach
 ** Sponge Construction
 *** Indirect Injection
-*** Indirect Squeezing
+*** TODO implement better approach
+After two steps of SPARKLE512, the rates are statistically
+independent. Thus, in order to observe a correlation between random
+numbers, it is necessary to observe rates that are 4 steps apart, for
+which the correlation is at most 2^{-78} (according to Table 9 of the
+ToSC paper), meaning at least 2^{156} blocks: osef
+*** OBSOLETE Indirect Squeezing
 The following SAGE script displays the corresponding matrix and shows
 that it indeed has full rank.
 

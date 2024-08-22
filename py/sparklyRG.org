@@ -1,5 +1,36 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-08-21 18:01:13 lperrin>
+#+Time-stamp: <2024-08-22 17:47:43 leo>
+
+
+#+OPTIONS: html-style:nil toc:2 num:t
+#+HTML_HEAD: <link href="../style.css" rel="stylesheet" type="text/css" /> <link rel="stylesheet" href="https://files.inria.fr/dircom/extranet/fonts-inria-sans.css"> <link rel="stylesheet" href="https://files.inria.fr/dircom/extranet/fonts-inria-serif.css">
+#+HTML_HEAD: <script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-MML-AM_CHTML"> </script>
+
+
+#+HTML_LINK_UP: <ignored>
+
+#+BEGIN_SRC elisp :exports none
+  (defun reset-formats(backend)
+    (setq org-html-home/up-format "
+  <div id=\"org-div-home-and-up\">
+      <a href=\"https://www.rocq.inria.fr/secret/index.php\">Cosmiq Homepage</a>
+      |
+      <a href=\"../index.html\">Léo Perrin's Homepage</a>
+      |
+      <a href=\"./rescale.html\">ReSCALE</a>
+  </div>")
+    (setq org-html-postamble (concat "<p class=\"date\">Last Update (by me): "
+				     (format-time-string "%d/%m/%Y")
+				     "</p>"))
+    )
+
+  (add-hook 'org-export-before-parsing-hook 'reset-formats)
+
+  (org-html-export-to-html)
+#+END_SRC
+
+#+RESULTS:
+: sparklyRG.html
 
 
 * Design Approach

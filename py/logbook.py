@@ -1,6 +1,6 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-08-26 20:55:07 leo> 
+# Time-stamp: <2024-08-26 21:07:11 leo> 
 
 import datetime, time
 import sys, os
@@ -9,7 +9,6 @@ import re
 
 from collections import defaultdict
 
-ONGOING_LOGBOOK = None
 
 # !SECTION! Setting up default parameters and the context 
 # =======================================================
@@ -39,7 +38,13 @@ else:
     int_types = (int)
     float_types = (float)
     from math import floor # needed when computing elapsed time
-    
+
+
+# !SUBSECTION! The ONGOING_LOGBOOK global variable
+
+# In order to have a convenient access to high level functions, we
+# keep track of the current logbook in this global variable. 
+ONGOING_LOGBOOK = None
     
 # !SECTION! Printing
 # ==================
@@ -390,10 +395,8 @@ class LogBook:
         # checking if there is any on-going timer
         for d in reversed(sorted(self.measurements["elapsed_time"].keys())):
             if d >= depth:
-                self.log_event(
-                    "\n" + str(self.measurements["elapsed_time"][d]),
-                    desc="t*"
-                )
+                elapsed = str(self.measurements["elapsed_time"][d])
+                self.log_to_basket("elapsed_time", elapsed, desc="t*")
                 del self.measurements["elapsed_time"][d]
         # adding to the story
         self.story.append({
@@ -483,12 +486,12 @@ class LogBook:
         self.story.append(full_event)
 
             
-    def log_to_basket(self, key, entry):
+    def log_to_basket(self, key, entry, desc="t"):
         if key in self.basket.keys():
             self.basket[key].append(entry)
         else:
             self.basket[key] = [entry]
-        self.log_event("{}: {}".format(key, entry), desc="t")
+        self.log_event("{}: {}".format(key, entry), desc=desc)
 
 
     def log_success(self, *args):
@@ -550,7 +553,7 @@ class LogBook:
                     ))
 
 
-    # !SUBSECTION!  The functions needed by the "with" logic
+    # !SUBSECTION! The functions needed by the "with" logic
 
     def __enter__(self):
         global ONGOING_LOGBOOK
@@ -583,10 +586,9 @@ class LogBook:
                     desc="l*"
                 )
             except:
-                self.log_fail("No git information to write.")
+                self.log_event("No git information to write.", desc="l*r")
             self.log_event("logbook to be saved in " + self.file_name,
                            desc="l*")
-            self.section(1, "Experiment starts now")
         # initializing measurements
         if self.with_time:
             self.measurements["elapsed_time"][0] = Chronograph("The experiment")
@@ -650,25 +652,28 @@ class LogBook:
                 self.basket_file
             ))
         self.save_to_file()
+        # undoing global modifications
         global print, old_print
         print = old_print
+        ONGOING_LOGBOOK = None
 
 
 # !SUBSECTION! Using the current LogBook instance
 
+
+# !TODO! write the documentation of these functions 
+
 def SECTION(heading, timed=False):
     ONGOING_LOGBOOK.section(1, heading, with_timer=timed)
-
     
 def SUBSECTION(heading, timed=False):
     ONGOING_LOGBOOK.section(2, heading, with_timer=timed)
-
     
 def SUBSUBSECTION(heading, timed=False):
     ONGOING_LOGBOOK.section(3, heading, with_timer=timed)
 
-def to_basket(key, entry):
-    ONGOING_LOGBOOK.log_to_basket(key, entry)
+def to_basket(key, entry, desc="t*"):
+    ONGOING_LOGBOOK.log_to_basket(key, entry, desc=desc)
 
 def SUCCESS(content):
     ONGOING_LOGBOOK.log_success(content)
@@ -705,6 +710,7 @@ def grab_last_basket(*args):
         raise Exception("could not open ./baskets directory!")
     if len(filters) == 0:
         # default case: we grab the latest
+        basket_list.sort()
         return open_basket("./baskets/" + basket_list[-1])
     else:
         # otherwise, we grab the first that matches all the inputs
@@ -776,8 +782,8 @@ def test_logbook():
 
 
 if __name__ == "__main__":
-    test_logbook()
-    # if len(sys.argv) > 1:
-    #     if sys.argv[1] == "grab":
-    #         d = grab_last_basket(sys.argv[2:])
-    #         print(d)
+    # test_logbook()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "grab":
+            d = grab_last_basket(sys.argv[2:])
+            print(d)

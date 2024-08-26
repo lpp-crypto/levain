@@ -1,6 +1,6 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-08-26 18:17:24 leo> 
+# Time-stamp: <2024-08-26 20:55:07 leo> 
 
 import datetime, time
 import sys, os
@@ -9,6 +9,7 @@ import re
 
 from collections import defaultdict
 
+ONGOING_LOGBOOK = None
 
 # !SECTION! Setting up default parameters and the context 
 # =======================================================
@@ -39,7 +40,7 @@ else:
     float_types = (float)
     from math import floor # needed when computing elapsed time
     
-
+    
 # !SECTION! Printing
 # ==================
 
@@ -552,6 +553,8 @@ class LogBook:
     # !SUBSECTION!  The functions needed by the "with" logic
 
     def __enter__(self):
+        global ONGOING_LOGBOOK
+        ONGOING_LOGBOOK = self
         if self.verbose:
             self.display("\n" + stylize(stylize(self.title, "bold"), "underline") + "\n")
         # handling the preamble (if relevant)
@@ -589,15 +592,6 @@ class LogBook:
             self.measurements["elapsed_time"][0] = Chronograph("The experiment")
         if self.with_mem:
             self.measurements["max_memory"] = MemTracer()
-        # declaring all useful functions
-        global SECTION, SUBSECTION, SUBSUBSECTION, print, to_basket, SUCCESS, FAIL
-        print         = self.log_event
-        SECTION       = lambda x, timed=False : self.section(1, x, with_timer=timed)
-        SUBSECTION    = lambda x, timed=False : self.section(2, x, with_timer=timed)
-        SUBSUBSECTION = lambda x, timed=False : self.section(3, x, with_timer=timed)
-        to_basket     = self.log_to_basket
-        SUCCESS       = self.log_success
-        FAIL          = self.log_fail
         return self
     
 
@@ -659,6 +653,28 @@ class LogBook:
         global print, old_print
         print = old_print
 
+
+# !SUBSECTION! Using the current LogBook instance
+
+def SECTION(heading, timed=False):
+    ONGOING_LOGBOOK.section(1, heading, with_timer=timed)
+
+    
+def SUBSECTION(heading, timed=False):
+    ONGOING_LOGBOOK.section(2, heading, with_timer=timed)
+
+    
+def SUBSUBSECTION(heading, timed=False):
+    ONGOING_LOGBOOK.section(3, heading, with_timer=timed)
+
+def to_basket(key, entry):
+    ONGOING_LOGBOOK.log_to_basket(key, entry)
+
+def SUCCESS(content):
+    ONGOING_LOGBOOK.log_success(content)
+                
+def FAIL(content):
+    ONGOING_LOGBOOK.log_fail(content)
                 
 
 # !SECTION! Post-processing of results
@@ -719,12 +735,12 @@ def test_colors():
 
 def test_logbook():
     # generating a dummy logbook
-    with LogBook("Testing the LogBook class"):# as lgbk:
+    with LogBook("Testing the LogBook class") as l:
 
-        SECTION("starting up")
+        l.SECTION("starting up")
         print("bli", desc="t*")
 
-        SUBSECTION("doing useless enumerations")
+        l.SUBSECTION("doing useless enumerations")
         for i in range(0, 4):
             print("a useless enumeration ({})".format(i), desc="n*")
         print("and I cut the enumeration...", desc="t")
@@ -732,22 +748,22 @@ def test_logbook():
         for i in range(0, 4):
             print("another useless enumeration, but with time-stamps ({})".format(i), desc="n")
 
-        SUBSECTION("a second subheading")
+        l.SUBSECTION("a second subheading")
         print("plain text line", desc="t*")
         print("plain text line with time-stamp", desc="t")
         
-        SECTION("moving on to pointless computations", timed=True)
-        SUBSECTION("Sums", timed=True)
+        l.SECTION("moving on to pointless computations", timed=True)
+        l.SUBSECTION("Sums", timed=True)
         blu = []
         for x in range(0, 2**7):
             blu.append(x**3)
-        to_basket("sum", sum(blu))
-        to_basket("sum", sum(x**2 for x in blu))
-        to_basket("sum", sum(x**3 for x in blu))
-        SUBSECTION("Successes and Failures", timed=True)
-        SUCCESS("happy !")
-        FAIL("SAD")
-        SUCCESS("happy !")
+        l.to_basket("sum", sum(blu))
+        l.to_basket("sum", sum(x**2 for x in blu))
+        l.to_basket("sum", sum(x**3 for x in blu))
+        l.SUBSECTION("Successes and Failures", timed=True)
+        l.SUCCESS("happy !")
+        l.FAIL("SAD")
+        l.SUCCESS("happy !")
         time.sleep(1)
         
     # testing reimport of the results
@@ -757,6 +773,7 @@ def test_logbook():
 
 
 # !SUBSECTION! Main program
+
 
 if __name__ == "__main__":
     test_logbook()

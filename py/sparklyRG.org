@@ -1,5 +1,5 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-08-22 18:54:24 leo>
+#+Time-stamp: <2024-08-26 20:55:39 leo>
 
 
 #+OPTIONS: html-style:nil toc:2 num:t
@@ -10,8 +10,8 @@
 #+HTML_LINK_UP: <ignored>
 
 #+BEGIN_SRC elisp :exports none
-  (defun reset-formats(backend)
-    (setq org-html-home/up-format "
+(defun reset-formats(backend)
+  (setq org-html-home/up-format "
   <div id=\"org-div-home-and-up\">
       <a href=\"https://www.rocq.inria.fr/secret/index.php\">Cosmiq Homepage</a>
       |
@@ -19,14 +19,14 @@
       |
       <a href=\"./rescale.html\">ReSCALE</a>
   </div>")
-    (setq org-html-postamble (concat "<p class=\"date\">Last Update (by me): "
-				     (format-time-string "%d/%m/%Y")
-				     "</p>"))
-    )
+  (setq org-html-postamble (concat "<p class=\"date\">Last Update (by me): "
+                                   (format-time-string "%d/%m/%Y")
+                                   "</p>"))
+  )
 
-  (add-hook 'org-export-before-parsing-hook 'reset-formats)
+(add-hook 'org-export-before-parsing-hook 'reset-formats)
 
-  (org-html-export-to-html)
+(org-html-export-to-html)
 #+END_SRC
 
 #+RESULTS:
@@ -81,7 +81,7 @@ works. It implements a sponge-based construction, meaning that it has
 an internal state of a fixed size (here, 512 bits, corresponding to
 two arrays of eight 32-bit words each). In order to manipulate such
 concepts, we need the C++ libraries =vector= and =cstdint=.
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.hpp
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.hpp :main no
 #include<vector>
 #include<cstdint>
 #+END_SRC
@@ -93,7 +93,7 @@ round constants (they were derived from the digits of the math
 constant *e* in order to optimize the probabilities of the best
 differential trails).
 
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.hpp
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.hpp :main no
 #define ROT(x, n) (((x) >> (n)) | ((x) << (32-(n))))
 #define ELL(x) (ROT(((x) ^ ((x) << 16)), 16))
 
@@ -101,8 +101,8 @@ differential trails).
 
 static const uint32_t RCON[N_BRANCHES] = {
     0xB7E15162, 0xBF715880, 0x38B4DA56, 0x324E7738,
-	0xBB1185EB, 0x4F7C7B57, 0xCFBFA1C8, 0xC2B3293D
-	};
+        0xBB1185EB, 0x4F7C7B57, 0xCFBFA1C8, 0xC2B3293D
+        };
 #+END_SRC
 
 
@@ -111,11 +111,11 @@ and from which the leakage functions are non trivial, a natural
 approach in C++ is to make an object. Its attributes and methods will
 be described below (namely [[*Attributes][here]] and [[*Methods][here]]).
 
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.hpp :noweb yes
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.hpp :noweb yes :main no
 class Sparkle512core {
 private:
     <<attributes>>
-public:
+    public:
     <<methods>>
 };
 #+END_SRC
@@ -142,7 +142,7 @@ when we use it to rebuild an output of the PRNG.
 
 
 #+NAME: attributes
-#+BEGIN_SRC cpp
+#+BEGIN_SRC cpp :main no
 unsigned int steps;
 std::vector<uint32_t> state;
 std::vector<uint64_t> entropy_tank;
@@ -150,8 +150,8 @@ unsigned int entropy_cursor;
 #+END_SRC
 
 *** Methods
-The interface of this class is simple as we only want to do three
-things:
+The interface of this class is simple as we only want to do a couple
+of things:
 1. initialize the object (contructor) by specifying the number of
    steps and the size of the output rate, i.e. the number of bytes
    that can be read before we need to update the state;
@@ -161,13 +161,16 @@ things:
    an operation which is achieved by "absorbing" data into the state
    (see the explanations on the sponge construction [[*Sponge Construction][above]]); and
    perhaps most importantly,
-3. output a pseudo-random unsigned integer of a given bit-length (at
-   most 64).
+3. output a pseudo-random in a given range (from a single bit to a
+   full 64-bit long integer), which will require us to...
+4. ... output a pseudo-random unsigned integer of a given bit-length
+   (at most 64).
 
-However, in order for the class to play with SAGE, it needs to have a
-constructor without argument. Thus, we will split the logic of
-construction into two: a constructor (which doesn't do much), and a
-=setup= function that actually takes arguments and does what's needed.
+That being said, we need to add an additional requirement: in order
+for the class to play with SAGE, it needs to have a *constructor
+without argument*. Thus, we will split the logic of construction into
+two: a constructor (which doesn't do much), and a =setup= function that
+actually takes arguments and does what's needed.
 
 Along with these high level functions, we need lower level routines to
 help implement them: =_permute()=, which updates the internal state
@@ -175,21 +178,22 @@ using the given number of SPARKLE512 steps, and =_squeeze=, which
 squeezes its content into the =entropy_tank=.
 
 #+NAME: methods
-#+BEGIN_SRC cpp
+#+BEGIN_SRC cpp :main no
 Sparkle512core();
 void setup(const unsigned int _steps, const unsigned int _output_rate);
 void absorb(const std::vector<uint8_t> byte_array);
 uint64_t get_n_bit_unsigned_integer(const unsigned int n);
+uint64_t get_unsigned_integer_in_range(const uint64_t lower_bound,
+                                       const uint64_t upper_bound);
 
 void _squeeze();
 void _permute();
 #+END_SRC
 
 ** Implementing the Permutation and its Interface
-
 Let us now implement all these methods. Classically, this will go in a
 =.cpp= file that imports the header.
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 #include "sparkle512.hpp"  
 #+END_SRC
 
@@ -199,7 +203,7 @@ the attributes, we instead use the following function. The size of
 =state= is not negotiable since we use SPARKLE512, so we can already
 build this attribute here, along with the =entropy_cursor=.
 
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 Sparkle512core::Sparkle512core():
     steps(0),
     state(2*N_BRANCHES, 0),
@@ -210,7 +214,7 @@ Sparkle512core::Sparkle512core():
 
 The other attributes are set using the =setup= method.
 
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 void Sparkle512core::setup(const unsigned int _steps, const unsigned int _output_rate)
 {
     steps = _steps;
@@ -221,51 +225,51 @@ void Sparkle512core::setup(const unsigned int _steps, const unsigned int _output
 *** Applying the Permutation
 This is straightforward: we simply take the reference implementation
 on [[https://github.com/cryptolu/sparkle/blob/master/software/sparkle/sparkle.c][github]]!
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 void Sparkle512core::_permute()
 {
     unsigned int i, j;  // Step and branch counter
     uint32_t rc, tmpx, tmpy, x0, y0;
   
     for(i = 0; i < steps; i ++) {
-	// Add round constant
-	state[1] ^= RCON[i % N_BRANCHES];
-	state[3] ^= i;
-	// ARXBOX layer
-	for(j = 0; j < 2*N_BRANCHES; j += 2) {
-	    rc = RCON[j>>1];
-	    state[j] += ROT(state[j+1], 31);
-	    state[j+1] ^= ROT(state[j], 24);
-	    state[j] ^= rc;
-	    state[j] += ROT(state[j+1], 17);
-	    state[j+1] ^= ROT(state[j], 17);
-	    state[j] ^= rc;
-	    state[j] += state[j+1];
-	    state[j+1] ^= ROT(state[j], 31);
-	    state[j] ^= rc;
-	    state[j] += ROT(state[j+1], 24);
-	    state[j+1] ^= ROT(state[j], 16);
-	    state[j] ^= rc;
-	}
-	// Linear layer
-	tmpx = x0 = state[0];
-	tmpy = y0 = state[1];
-	for(j = 2; j < N_BRANCHES; j += 2) {
-	    tmpx ^= state[j];
-	    tmpy ^= state[j+1];
-	}
-	tmpx = ELL(tmpx);
-	tmpy = ELL(tmpy);
-	for (j = 2; j < N_BRANCHES; j += 2) {
-	    state[j-2] = state[j+N_BRANCHES] ^ state[j] ^ tmpy;
-	    state[j+N_BRANCHES] = state[j];
-	    state[j-1] = state[j+N_BRANCHES+1] ^ state[j+1] ^ tmpx;
-	    state[j+N_BRANCHES+1] = state[j+1];
-	}
-	state[N_BRANCHES-2] = state[N_BRANCHES] ^ x0 ^ tmpy;
-	state[N_BRANCHES] = x0;
-	state[N_BRANCHES-1] = state[N_BRANCHES+1] ^ y0 ^ tmpx;
-	state[N_BRANCHES+1] = y0;
+        // Add round constant
+        state[1] ^= RCON[i % N_BRANCHES];
+        state[3] ^= i;
+        // ARXBOX layer
+        for(j = 0; j < 2*N_BRANCHES; j += 2) {
+            rc = RCON[j>>1];
+            state[j] += ROT(state[j+1], 31);
+            state[j+1] ^= ROT(state[j], 24);
+            state[j] ^= rc;
+            state[j] += ROT(state[j+1], 17);
+            state[j+1] ^= ROT(state[j], 17);
+            state[j] ^= rc;
+            state[j] += state[j+1];
+            state[j+1] ^= ROT(state[j], 31);
+            state[j] ^= rc;
+            state[j] += ROT(state[j+1], 24);
+            state[j+1] ^= ROT(state[j], 16);
+            state[j] ^= rc;
+        }
+        // Linear layer
+        tmpx = x0 = state[0];
+        tmpy = y0 = state[1];
+        for(j = 2; j < N_BRANCHES; j += 2) {
+            tmpx ^= state[j];
+            tmpy ^= state[j+1];
+        }
+        tmpx = ELL(tmpx);
+        tmpy = ELL(tmpy);
+        for (j = 2; j < N_BRANCHES; j += 2) {
+            state[j-2] = state[j+N_BRANCHES] ^ state[j] ^ tmpy;
+            state[j+N_BRANCHES] = state[j];
+            state[j-1] = state[j+N_BRANCHES+1] ^ state[j+1] ^ tmpx;
+            state[j+N_BRANCHES+1] = state[j+1];
+        }
+        state[N_BRANCHES-2] = state[N_BRANCHES] ^ x0 ^ tmpy;
+        state[N_BRANCHES] = x0;
+        state[N_BRANCHES-1] = state[N_BRANCHES+1] ^ y0 ^ tmpx;
+        state[N_BRANCHES+1] = y0;
     }
 }
 #+END_SRC
@@ -275,25 +279,22 @@ In order to further break the correlation between the successive
 outputs of the sponge, we don't use a basic squeezing. Instead, we use
 an indirect squeezing, as explained [[*Indirect Squeezing][above]]. We add the bytes to the
 =entropy_tank= branch by branch, so 8 by 8.
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp
+
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 void Sparkle512core::_squeeze()
 {
     uint32_t tmp;
-    for (unsigned int i=0; i<entropy_tank.size(); i += 64)
+    for (unsigned int i=0; i<entropy_tank.size(); i += 32)
     {
-	unsigned int k = i / 32; // index in the state
-	// dealing with x
-	tmp = state[k] ^ state[(k+4) % (2*N_BRANCHES)] ^ state[(k+10) % (2*N_BRANCHES)] ;
-	for(unsigned int j=0; j<32; j++)
-	    entropy_tank[i+j] = (tmp >> j) & 0x1;
-	// dealing with y
-	tmp = state[k+1] ^ state[(k+5) % (2*N_BRANCHES)] ^ state[(k+11) % (2*N_BRANCHES)] ;
-	for(unsigned int j=0; j<32; j++)
-	    entropy_tank[i+32+j] = (tmp >> j) & 0x1;
+        unsigned int k = i / 32; 
+        tmp = state[k]; 
+        for(unsigned int j=0; j<32; j++)
+            entropy_tank[i+j] = (tmp >> j) & 0x1;
     }
     entropy_cursor = 0;
 }
 #+END_SRC
+
 *** Absorbing Seeds
 We simply XOR the content of the =byte_array= input into the internal
 state.
@@ -303,12 +304,12 @@ permutation three times (with the addition of some domain separating
 constants in the capacity in-between).
 
 Note that this method can only handle inputs smaller than the 
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 void Sparkle512core::absorb(const std::vector<uint8_t> byte_array)
 {
     for(unsigned int i=0; i<byte_array.size(); i+=4)
-	for(unsigned int j=0; j<4; j++)
-	    state[i >> 2] ^= ((uint32_t)byte_array[i + j]) << (8*j) ;
+        for(unsigned int j=0; j<4; j++)
+            state[i >> 2] ^= ((uint32_t)byte_array[i + j]) << (8*j) ;
     _permute();
     state[state.size()-1] ^= 1;
     _permute();
@@ -318,31 +319,98 @@ void Sparkle512core::absorb(const std::vector<uint8_t> byte_array)
 
 
 #+END_SRC
-** Getting Fixed Bit-length Outputs
-In general, the goal is to return a 64-bit unsigned integer whose bits
-of low weight correspond to a uniformly generated pseudo-random number
-with a specified bit-length. As the =entropy_tank= contains bits, this
-is easily achieved with some bit-fiddling.
+** Getting Bounded Outputs
+In general, the goal is to return an integer contained within a
+specific range. The first step towards this goal consists in
+outputting a bit of a given bit-length, and then to do some rejection
+sampling.
 
-#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp
+*** Fixed bit-length output
+64-bit unsigned integer whose bits of low weight correspond to a
+uniformly generated pseudo-random number with a specified
+bit-length. As the =entropy_tank= contains bits, this is easily achieved
+with some bit-fiddling.
+
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 uint64_t Sparkle512core::get_n_bit_unsigned_integer(const unsigned int n)
 {
     uint64_t result = 0;
     for (unsigned int i=0; i<n; i ++)
     {
-	if (entropy_cursor == entropy_tank.size())
-	{
-	    _permute();
-	    _squeeze();
-	}
-	result <<= 1;
-	result |= entropy_tank[entropy_cursor];
-	entropy_cursor ++;
+        if (entropy_cursor == entropy_tank.size())
+        {
+            _permute();
+            _squeeze();
+        }
+        result <<= 1;
+        result |= entropy_tank[entropy_cursor];
+        entropy_cursor ++;
     }
     return result;
 }
 #+END_SRC
 
+*** Rejection Sampling
+Using the =get_n_bit_unsigned_integer= function, it is then easy to
+return outputs in a specific range. We use rejection sampling to avoid
+any trivial bias. In order for it to work, we need to get the
+bit-length of the desired output. Instead of using a logarithm, we can
+do some bit-fiddling using the =__builtin_clz= function (or, in this
+case, its long long variant). It is =GCC= specific, and its behaviour is
+explained in the [[https://gcc.gnu.org/onlinedocs/gcc-4.8.0/gcc/Other-Builtins.html][GCC manual]]: it returns the number of high-bit
+trailing zeroes in the binary representation. To better see it, we
+evaluate it on some small integers.
+
+#+BEGIN_SRC C++ :flags -std=c++17
+#include<iostream>
+#include<cstdint>
+
+int main(int argc, char ** argv)
+{
+    for (uint64_t i=1; i<67; i+=5)
+        std::cout << "|" << i << "|" << 64-__builtin_clzll(i) << std::endl;
+}
+#+END_SRC
+
+#+RESULTS:
+|   |  1 | 1 |
+|   |  6 | 3 |
+|   | 11 | 4 |
+|   | 16 | 5 |
+|   | 21 | 5 |
+|   | 26 | 5 |
+|   | 31 | 5 |
+|   | 36 | 6 |
+|   | 41 | 6 |
+|   | 46 | 6 |
+|   | 51 | 6 |
+|   | 56 | 6 |
+|   | 61 | 6 |
+|   | 66 | 7 |
+
+It does what we need! Writing the function =get_integer_in_range= is
+then trivial.
+
+#+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
+uint64_t Sparkle512core::get_unsigned_integer_in_range(
+    const uint64_t lower_bound,
+    const uint64_t upper_bound)
+{
+    uint64_t
+        bit_length = 64 - __builtin_clzll(upper_bound - lower_bound),
+        range = upper_bound - lower_bound,
+        output ;
+    do
+    {
+        output = get_n_bit_unsigned_integer(bit_length);
+    } while (output >= range) ;
+    return lower_bound + output;    
+}
+#+END_SRC
+
+Initializing `ouput` to a first output of =get_n_bit_unsigned_integer=
+and then using a "regular" =while= loop seems to yield a slightly slower
+PRNG.
 * Calling the Core from SAGE
 In order to work, this module must be compiled. This achieved using
 the following shell command:
@@ -375,7 +443,8 @@ cdef extern from "./sparkle512.cpp":
         void setup(const unsigned int steps, const unsigned int)
         void absorb(const vector[uint8_t])
         uint64_t get_n_bit_unsigned_integer(const unsigned int n)
-
+        uint64_t get_unsigned_integer_in_range(const uint64_t lower,
+                                               const uint64_t upper)
 #+END_SRC
 
 ** Wrapping
@@ -389,23 +458,43 @@ to use the C++ =Sparkle512core= class, we build a custom class,
 =SparkleRG=. It will then itself be wrapped later in such a way as to
 provide relevant parameter choices.
 
-#+BEGIN_SRC python :tangle sparklyRG/wrapper.pyx
+#+BEGIN_SRC python :tangle sparklyRG/wrapper.pyx 
 from declaration cimport *
 
 cdef class SparkleRG:
     cdef Sparkle512core core
+    steps: uint64_t
+    output_rate: uint64_t 
     
     def __init__(self, steps, output_rate):
         self.core = Sparkle512core()
-        self.core.setup(steps, output_rate)
+        self.steps = steps
+        self.output_rate = output_rate
+        self.core.setup(self.steps, self.output_rate)
+
 
     def absorb(self, x):
         # handling padding
         to_absorb = x + bytearray([0] * (48 - len(x)))
         self.core.absorb(to_absorb)
 
+
     def get_n_bit_unsigned_integer(self, n):
+        if n > 64:
+            raise Exception("Cannot return integers more than 64-bit long")
         return self.core.get_n_bit_unsigned_integer(n)
+
+    def __call__(self, lower, upper):
+        if upper <= lower:
+            raise Exception("`upper` must be strictly higher than `lower`")
+        return self.core.get_unsigned_integer_in_range(lower, upper)
+
+    def __str__(self):
+        return "SparklyRG({},{}) ; absorbed={}".format(
+            self.steps,
+            self.output_rate,
+            []
+        )
 #+END_SRC
 
 ** Compiling
@@ -466,9 +555,10 @@ tests on the =SparkleRG= low-level class.
 from .wrapper import *
 #+END_SRC
 
-** Testing
+* Some Tests
+** Fixed bit-length generation
 Running the following SAGE script will let us see what the output of
-the PRNG looks like with just 3 rounds of mixing.
+the PRNG looks like with 4 rounds of mixing.
 
 #+BEGIN_SRC python :tangle test_sparkle_core.py
 #!/usr/bin/sage
@@ -476,7 +566,13 @@ the PRNG looks like with just 3 rounds of mixing.
 from sage.all import *
 from sparklyRG import *
 
-prg = SparkleRG(3, 384)
+def bit_length(x):
+    if x <= 0:
+        return 0
+    else:
+        return ceil(log(x, 2))
+
+prg = SparkleRG(4, 256)
 
 s = 0
 print("| # perm | n | output | HW | length deficit |")
@@ -489,7 +585,7 @@ for n in range(0, 64):
         n,
         hex(x),
         Integer(x).popcount(),
-        n - Integer(x).bit_length()
+        n - bit_length(x)
     ))
 #+END_SRC
 
@@ -520,54 +616,121 @@ Here is the result (obviously, a nice looking org-table!):
 |      0 | 20 |                0x0 |  0 |             20 |
 |      0 | 21 |                0x0 |  0 |             21 |
 |      0 | 22 |                0x0 |  0 |             22 |
-|      0 | 23 |                0x0 |  0 |             23 |
-|      0 | 24 |                0x0 |  0 |             24 |
-|      0 | 25 |                0x0 |  0 |             25 |
-|      0 | 26 |                0x0 |  0 |             26 |
-|      0 | 27 |                0x0 |  0 |             27 |
-|      1 | 28 |           0x2afdd0 | 13 |              6 |
-|      1 | 29 |         0x1d76fe0a | 18 |              0 |
-|      1 | 30 |          0xc1221ca | 10 |              2 |
-|      1 | 31 |         0x5ecafbe9 | 21 |              0 |
-|      1 | 32 |         0x2468e67f | 17 |              2 |
-|      1 | 33 |        0x1ce5f2452 | 17 |              0 |
-|      1 | 34 |        0x11a22e9ed | 17 |              1 |
-|      1 | 35 |        0x266d47fdc | 21 |              1 |
-|      1 | 36 |        0xfca257eab | 22 |              0 |
-|      1 | 37 |       0x1ac0337643 | 17 |              0 |
-|      1 | 38 |        0xc442b3600 | 12 |              2 |
-|      2 | 39 |       0x13a3867729 | 19 |              2 |
-|      2 | 40 |       0x567d857a77 | 24 |              1 |
-|      2 | 41 |       0x6d0ef5e35d | 24 |              2 |
-|      2 | 42 |       0x18713c01e3 | 16 |              5 |
-|      2 | 43 |      0x666f409e7b1 | 23 |              0 |
-|      2 | 44 |      0x8ba14cc2d96 | 20 |              0 |
-|      2 | 45 |     0x1de52cf52f1a | 26 |              0 |
-|      2 | 46 |     0x206c955e87ee | 24 |              0 |
-|      2 | 47 |     0x664623185716 | 20 |              0 |
-|      3 | 48 |     0xfaaad4db0060 | 22 |              0 |
-|      3 | 49 |      0x48d56e20234 | 17 |              6 |
-|      3 | 50 |    0x1a1e77205b369 | 25 |              1 |
-|      3 | 51 |    0x683218e45fbd1 | 25 |              0 |
-|      3 | 52 |    0xa71310ba4b80a | 21 |              0 |
-|      3 | 53 |    0x24d1cd36484a7 | 23 |              3 |
-|      3 | 54 |   0x24b310db07cc68 | 24 |              0 |
-|      4 | 55 |   0x1df022818bd645 | 24 |              2 |
-|      4 | 56 |   0x8ce5895c2bed61 | 28 |              0 |
-|      4 | 57 |  0x1e9796a1ee0b246 | 29 |              0 |
-|      4 | 58 |   0x50c264a0c92bc7 | 23 |              3 |
-|      4 | 59 |  0x787e05b3144d582 | 27 |              0 |
-|      4 | 60 |  0xa85d9de1dc7c376 | 34 |              0 |
-|      4 | 61 |  0x5f618ad67614361 | 29 |              2 |
-|      5 | 62 | 0x2b01e54da6bf702f | 33 |              0 |
-|      5 | 63 |  0x8ccabd177a0e7d7 | 34 |              3 |
+|      0 | 23 |            0x60e0a |  7 |              4 |
+|      0 | 24 |              0xb6b |  8 |             12 |
+|      0 | 25 |          0x1438d0d | 11 |              0 |
+|      0 | 26 |          0x26524f3 | 13 |              0 |
+|      0 | 27 |          0x6c6ad05 | 13 |              0 |
+|      1 | 28 |          0x10e5576 | 13 |              3 |
+|      1 | 29 |          0x5687d1c | 14 |              2 |
+|      1 | 30 |         0x219c8c21 | 11 |              0 |
+|      1 | 31 |         0x66774fb8 | 19 |              0 |
+|      1 | 32 |         0x384fa268 | 14 |              2 |
+|      1 | 33 |        0x1ccf56a09 | 17 |              0 |
+|      1 | 34 |        0x304e63bc4 | 16 |              0 |
+|      1 | 35 |        0x531534a19 | 15 |              0 |
+|      1 | 36 |        0xdb1f567dd | 24 |              0 |
+|      1 | 37 |        0xe9845bfaf | 22 |              1 |
+|      1 | 38 |       0x13fdec636c | 23 |              1 |
+|      2 | 39 |       0x64cf8db9c0 | 20 |              0 |
+|      2 | 40 |       0x898461c5a0 | 14 |              0 |
+|      2 | 41 |        0xea43ec6a9 | 19 |              5 |
+|      2 | 42 |       0x84ae117735 | 19 |              2 |
+|      2 | 43 |      0x5839f928a89 | 20 |              0 |
+|      2 | 44 |       0x6792adbd77 | 25 |              5 |
+|      2 | 45 |     0x186948dc7410 | 18 |              0 |
+|      2 | 46 |     0x1392624c4392 | 18 |              1 |
+|      2 | 47 |      0x9e9f491b6fc | 26 |              3 |
+|      3 | 48 |     0xef4ed46368cb | 27 |              0 |
+|      3 | 49 |     0x6dc176b3785c | 26 |              2 |
+|      3 | 50 |     0xcf9b444b5842 | 22 |              2 |
+|      3 | 51 |    0x7d131520bf515 | 25 |              0 |
+|      3 | 52 |    0xfbc807e31c3cf | 29 |              0 |
+|      3 | 53 |   0x1cfec8775b7705 | 32 |              0 |
+|      3 | 54 |   0x13853a3ea97993 | 28 |              1 |
+|      4 | 55 |   0x7881294606fb0e | 24 |              0 |
+|      4 | 56 |   0xb611bdbc5f2610 | 28 |              0 |
+|      4 | 57 |  0x14dfb502d157d0e | 30 |              0 |
+|      4 | 58 |  0x3a9fa85ff1dfc39 | 37 |              0 |
+|      4 | 59 |  0x6cc4fcc4a3c47d6 | 31 |              0 |
+|      4 | 60 |  0x3d3f7f3e140bbd3 | 36 |              2 |
+|      4 | 61 |  0xe3ad9117732f514 | 31 |              1 |
+|      5 | 62 | 0x3777b6d1de07f8d6 | 39 |              0 |
+|      5 | 63 | 0x7b9268b1108b659e | 30 |              0 |
 
 It is as expected: the sponge is not seeded, so we start with only
 zeroes until the permutation is finally called. Then, we have balanced
 looking outputs of a plausible length.
 
-* The SparklyRG module
-#+BEGIN_SRC python :tangle sparklyRG/__init__.py
-# some logic
+** Comparison with =randint=
+SAGE has a built-in function to output random numbers in a given range
+called =randint=. It has an annoying interface in that it differs from
+that of =range=: =randint= can reach its second output, unlike =range=. If
+=range(0,1)= is basically =[0]=, =randint(0,1)= can be either =0= or =1=.
+
+Running the following SAGE script will let us see what the output of
+the PRNG looks like with 4 rounds of mixing.
+
+#+BEGIN_SRC python :tangle test_sparkle_range.py
+#!/usr/bin/sage
+
+from sage.all import *
+from collections import defaultdict
+from sparklyRG import *
+
+import time
+
+
+global SECTION, SUBSECTION, SUBSUBSECTION, print, to_basket, SUCCESS, FAIL
+
+from logbook import *
+
+
+
+with LogBook("Comparing SPARKLE and =randint="):
+    SECTION("Initialization")
+    prg = SparkleRG(8, 256)
+    prg.absorb(str(time.time()).encode("UTF-8"))
+    print(prg)
+        
+    n_bins = 65 #prg(50, 100)
+    expected_bin_size = 2**15
+    print(n_bins)
+    sample_size = n_bins * expected_bin_size
+
+    SECTION("Calling PRNGs")
+    counters_sparkle = [0 for x in range(0, n_bins)]
+    counters_randint = [0 for x in range(0, n_bins)]
+    
+    SUBSECTION("SPARKLE-based", timed=True)
+    for i in range(0, sample_size):
+        counters_sparkle[prg(0, n_bins)] += 1
+
+    SUBSECTION("randint", timed=True)
+    for i in range(0, sample_size):
+        counters_randint[randint(0, n_bins-1)] += 1
+
+    SECTION("Computing biases")
+    biases_sparkle = defaultdict(int)
+    biases_randint = defaultdict(int)
+    for k in range(0, n_bins):
+        biases_sparkle[counters_sparkle[k] - expected_bin_size] = k
+        biases_randint[counters_randint[k] - expected_bin_size] = k
+    
+    SUBSECTION("sparkle")
+    line = ""
+    for k in sorted(biases_sparkle.keys()):
+        line += "{}: {},  ".format(k, biases_sparkle[k])
+    print(line)
+    
+    SUBSECTION("randint")
+    line = ""
+    for k in sorted(biases_randint.keys()):
+        line += "{}: {},  ".format(k, biases_randint[k])
+    print(line)
+
+    SUCCESS("so?")
 #+END_SRC
+
+
 

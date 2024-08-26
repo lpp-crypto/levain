@@ -1,13 +1,11 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-08-21 17:25:22 lperrin> 
+# Time-stamp: <2024-08-26 18:17:24 leo> 
 
-import datetime
-import sys
-import os
+import datetime, time
+import sys, os
 import pickle
 import re
-import sys
 
 from collections import defaultdict
 
@@ -149,11 +147,60 @@ def input_for_print(to_print):
         return result[:-1]
         
 
+# !SECTION! Measuring tools
+
+class Chronograph:
+    def __init__(self, title):
+        self.title = title
+        self.start_time = datetime.datetime.now()
+
+    def __str__(self):
+        elapsed_time = datetime.datetime.now() - self.start_time
+        tot_secs = floor(elapsed_time.total_seconds())
+        days = floor(tot_secs / 86400)
+        hours = floor((tot_secs % 86400) / 3600)
+        minutes = floor((tot_secs % 3600) / 60)
+        seconds = (tot_secs % 60) + elapsed_time.total_seconds() - tot_secs
+        return "\"{}\" lasted {}s ({})".format(
+            self.title,
+            elapsed_time.total_seconds(),
+            "{:d}d {:02d}h {:02d}m {:5.03f}s".format(
+                days,
+                hours,
+                minutes,
+                seconds
+        ))
+        
+
+
+class MemTracer:
+    def __init__(self):
+        import tracemalloc as local_mem_tracer
+        self.mem_tracer = local_mem_tracer
+        self.mem_tracer.start()
+
+    def __str__(self):
+        memory_size, memory_peak = self.mem_tracer.get_traced_memory()
+        self.mem_tracer.stop()
+        if memory_peak > 1024**3:
+            pretty_peak = "(= {:.2f}GB)".format(memory_peak / 1024**3)
+        elif memory_peak > 1024**2:
+            pretty_peak = "(= {:.2f}MB)".format(memory_peak / 1024**2)
+        elif memory_peak > 1024:
+            pretty_peak = "(= {:.2f}kB)".format(memory_peak / 1024)
+        else:
+            pretty_peak = ""
+        return "peak memory usage: {}B {}".format(
+            memory_peak,
+            pretty_peak
+        )
+        
+
+    
+
 # !SECTION! The LogBook class
 
-# !TODO! update documentation to take new interface into account:
-# !replacing `print`, and providing high level functions (SECTION,
-# !etc).
+
 class LogBook:
     """A class helping with keeping track of the data generated while
     a script is running.
@@ -323,12 +370,13 @@ class LogBook:
         # initializing the state
         self.basket = {}
         self.story = []
-        if self.with_mem:
-            import tracemalloc
-            self.mem_tracer = tracemalloc
         self.enum_counter = None
         self.success_counter = 0
         self.fail_counter = 0
+        self.measurements = {
+            "elapsed_time": {},
+            "max_memory": None
+        }
         # setting up the printing function
         self.display = print
         global old_print
@@ -337,11 +385,23 @@ class LogBook:
 
     # !SUBSECTION! Logging events and results
     
-    def section(self, depth, heading):
+    def section(self, depth, heading, with_timer=False):
+        # checking if there is any on-going timer
+        for d in reversed(sorted(self.measurements["elapsed_time"].keys())):
+            if d >= depth:
+                self.log_event(
+                    "\n" + str(self.measurements["elapsed_time"][d]),
+                    desc="t*"
+                )
+                del self.measurements["elapsed_time"][d]
+        # adding to the story
         self.story.append({
             "content": heading,
             "type": "head" + str(depth)
         })
+        # starting a timer if necessary
+        if with_timer:
+            self.measurements["elapsed_time"][depth] = Chronograph(heading)
         self.current_toc_depth = depth
         if self.verbose:
             line = "{}{} {}".format(
@@ -421,7 +481,6 @@ class LogBook:
         full_event["content"] = prefix_text + str(full_event["content"])
         self.story.append(full_event)
 
-
             
     def log_to_basket(self, key, entry):
         if key in self.basket.keys():
@@ -430,8 +489,7 @@ class LogBook:
             self.basket[key] = [entry]
         self.log_event("{}: {}".format(key, entry), desc="t")
 
-    # !TODO! add a `log_success ` method
-        
+
     def log_success(self, *args):
         text = [x for x in args]
         if len(text) > 0:
@@ -528,15 +586,15 @@ class LogBook:
             self.section(1, "Experiment starts now")
         # initializing measurements
         if self.with_time:
-            self.start_time = datetime.datetime.now()
+            self.measurements["elapsed_time"][0] = Chronograph("The experiment")
         if self.with_mem:
-            self.mem_tracer.start()
+            self.measurements["max_memory"] = MemTracer()
         # declaring all useful functions
         global SECTION, SUBSECTION, SUBSUBSECTION, print, to_basket, SUCCESS, FAIL
         print         = self.log_event
-        SECTION       = lambda x : self.section(1, x)
-        SUBSECTION    = lambda x : self.section(2, x)
-        SUBSUBSECTION = lambda x : self.section(3, x)
+        SECTION       = lambda x, timed=False : self.section(1, x, with_timer=timed)
+        SUBSECTION    = lambda x, timed=False : self.section(2, x, with_timer=timed)
+        SUBSUBSECTION = lambda x, timed=False : self.section(3, x, with_timer=timed)
         to_basket     = self.log_to_basket
         SUCCESS       = self.log_success
         FAIL          = self.log_fail
@@ -550,38 +608,16 @@ class LogBook:
                 self.section(2, "Performances")
             # handling time complexity
             if self.with_time:
-                elapsed_time = datetime.datetime.now() - self.start_time
-                tot_secs = floor(elapsed_time.total_seconds())
-                days = floor(tot_secs / 86400)
-                hours = floor((tot_secs % 86400) / 3600)
-                minutes = floor((tot_secs % 3600) / 60)
-                seconds = (tot_secs % 60) + elapsed_time.total_seconds() - tot_secs
-                elapsed_time_description = "elapsed time: {}s ({})".format(
-                    elapsed_time.total_seconds(),
-                    "{:d}d {:02d}h {:02d}m {:5.03f}s".format(
-                        days,
-                        hours,
-                        minutes,
-                        seconds
-                ))
-                self.log_event(elapsed_time_description, desc="l*")
-            # handling memory complexity
-            if self.with_mem:       
-                memory_size, memory_peak = self.mem_tracer.get_traced_memory()
-                self.mem_tracer.stop()
-                if memory_peak > 1024**3:
-                    pretty_peak = "(= {:.2f}GB)".format(memory_peak / 1024**3)
-                elif memory_peak > 1024**2:
-                    pretty_peak = "(= {:.2f}MB)".format(memory_peak / 1024**2)
-                elif memory_peak > 1024:
-                    pretty_peak = "(= {:.2f}kB)".format(memory_peak / 1024)
-                else:
-                    pretty_peak = ""
-                memory_description = "peak memory usage: {}B {}".format(
-                    memory_peak,
-                    pretty_peak
+                self.log_event(
+                    str(self.measurements["elapsed_time"][0]),
+                    desc="l*"
                 )
-                self.log_event(memory_description, desc="l*")
+            # handling memory complexity
+            if self.with_mem:
+                self.log_event(
+                    str(self.measurements["max_memory"]),
+                    desc="l*"
+                )
             # handling results in the logbook itself
             self.section(2, "Outcome")
             if len(self.basket.keys()) == 0:
@@ -700,28 +736,31 @@ def test_logbook():
         print("plain text line", desc="t*")
         print("plain text line with time-stamp", desc="t")
         
-        SECTION("moving on to pointless computations")
-        
+        SECTION("moving on to pointless computations", timed=True)
+        SUBSECTION("Sums", timed=True)
         blu = []
         for x in range(0, 2**7):
             blu.append(x**3)
         to_basket("sum", sum(blu))
         to_basket("sum", sum(x**2 for x in blu))
         to_basket("sum", sum(x**3 for x in blu))
+        SUBSECTION("Successes and Failures", timed=True)
         SUCCESS("happy !")
         FAIL("SAD")
         SUCCESS("happy !")
+        time.sleep(1)
         
     # testing reimport of the results
     print("grabbing")
-    d = grab_basket()
+    d = grab_last_basket()
     print(d)
 
 
 # !SUBSECTION! Main program
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "grab":
-            d = grab_last_basket(sys.argv[2:])
-            print(d)
+    test_logbook()
+    # if len(sys.argv) > 1:
+    #     if sys.argv[1] == "grab":
+    #         d = grab_last_basket(sys.argv[2:])
+    #         print(d)

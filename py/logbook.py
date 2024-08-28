@@ -1,6 +1,6 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-08-26 21:07:11 leo> 
+# Time-stamp: <2024-08-27 17:45:01 lperrin> 
 
 import datetime, time
 import sys, os
@@ -45,6 +45,7 @@ else:
 # In order to have a convenient access to high level functions, we
 # keep track of the current logbook in this global variable. 
 ONGOING_LOGBOOK = None
+old_print = print
     
 # !SECTION! Printing
 # ==================
@@ -332,7 +333,7 @@ class LogBook:
                  verbose=True,
                  print_format="org",
                  with_time=True,
-                 with_mem=True,
+                 with_mem=False,
                  with_preamble=True,
                  with_conclusion=True,
                  ):
@@ -370,6 +371,9 @@ class LogBook:
         # initializing parameters
         self.with_time = with_time
         self.with_mem = with_mem
+        if self.with_mem:
+            self.log_event("WARNING: measuring memory usage messes with time complexities!",
+                           desc="tr*")
         self.with_preamble = with_preamble 
         self.with_conclusion = with_conclusion
         self.title = title
@@ -556,8 +560,9 @@ class LogBook:
     # !SUBSECTION! The functions needed by the "with" logic
 
     def __enter__(self):
-        global ONGOING_LOGBOOK
+        global ONGOING_LOGBOOK, print
         ONGOING_LOGBOOK = self
+        print = ONGOING_LOGBOOK.log_event
         if self.verbose:
             self.display("\n" + stylize(stylize(self.title, "bold"), "underline") + "\n")
         # handling the preamble (if relevant)
@@ -680,7 +685,10 @@ def SUCCESS(content):
                 
 def FAIL(content):
     ONGOING_LOGBOOK.log_fail(content)
-                
+
+def write(content, desc="t*"):
+    ONGOING_LOGBOOK.log_event(content, desc=desc)
+
 
 # !SECTION! Post-processing of results
 # ====================================
@@ -743,10 +751,10 @@ def test_logbook():
     # generating a dummy logbook
     with LogBook("Testing the LogBook class") as l:
 
-        l.SECTION("starting up")
+        SECTION("starting up")
         print("bli", desc="t*")
 
-        l.SUBSECTION("doing useless enumerations")
+        SUBSECTION("doing useless enumerations")
         for i in range(0, 4):
             print("a useless enumeration ({})".format(i), desc="n*")
         print("and I cut the enumeration...", desc="t")
@@ -754,22 +762,22 @@ def test_logbook():
         for i in range(0, 4):
             print("another useless enumeration, but with time-stamps ({})".format(i), desc="n")
 
-        l.SUBSECTION("a second subheading")
+        SUBSECTION("a second subheading")
         print("plain text line", desc="t*")
         print("plain text line with time-stamp", desc="t")
         
-        l.SECTION("moving on to pointless computations", timed=True)
-        l.SUBSECTION("Sums", timed=True)
+        SECTION("moving on to pointless computations", timed=True)
+        SUBSECTION("Sums", timed=True)
         blu = []
         for x in range(0, 2**7):
             blu.append(x**3)
-        l.to_basket("sum", sum(blu))
-        l.to_basket("sum", sum(x**2 for x in blu))
-        l.to_basket("sum", sum(x**3 for x in blu))
-        l.SUBSECTION("Successes and Failures", timed=True)
-        l.SUCCESS("happy !")
-        l.FAIL("SAD")
-        l.SUCCESS("happy !")
+        to_basket("sum", sum(blu))
+        to_basket("sum", sum(x**2 for x in blu))
+        to_basket("sum", sum(x**3 for x in blu))
+        SUBSECTION("Successes and Failures", timed=True)
+        SUCCESS("happy !")
+        FAIL("SAD")
+        SUCCESS("happy !")
         time.sleep(1)
         
     # testing reimport of the results
@@ -782,8 +790,8 @@ def test_logbook():
 
 
 if __name__ == "__main__":
-    # test_logbook()
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "grab":
-            d = grab_last_basket(sys.argv[2:])
-            print(d)
+    test_logbook()
+    # if len(sys.argv) > 1:
+    #     if sys.argv[1] == "grab":
+    #         d = grab_last_basket(sys.argv[2:])
+    #         print(d)

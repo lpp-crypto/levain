@@ -10,8 +10,8 @@ if platform == 'darwin':    #macOs
 else:
     os.environ["CC"] = "g++"
     os.environ["CXX"] = "g++"
-extra_compile_args = ["-O3", "-march=native", "-std=c++17", "-pthread", "-Wall"]
-extra_link_args=[]
+    extra_compile_args = ["-O3", "-march=native", "-std=c++17", "-pthread", "-Wall", "-ffast-math"]
+    extra_link_args=[]
 
 HOME = os.path.expanduser('~')
 if platform == 'darwin':
@@ -23,13 +23,13 @@ else:
 
 
 
-module_cpputils = Extension("cpputils",
-                         sources=["cpputils.pyx"],
-                         libraries=[],
-                         include_dirs=['.'], 
-                         language='c++',
-                         extra_link_args=extra_link_args,
-                         extra_compile_args=extra_compile_args)
-                
+module_sparklyRG = Extension("wrapper",
+                             sources=["wrapper.pyx"],
+                             libraries=[],
+                             include_dirs=['.'], 
+                             language='c++',
+                             extra_link_args=extra_link_args,
+                             extra_compile_args=extra_compile_args)
 
-setup(name='cpputils', ext_modules=cythonize([module_cpputils], language_level = "3"))
+
+setup(name='wrapper', ext_modules=cythonize([module_sparklyRG], language_level = "3"))

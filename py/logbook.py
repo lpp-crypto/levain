@@ -1,11 +1,12 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-08-27 17:45:01 lperrin> 
+# Time-stamp: <2024-08-30 14:58:52 lperrin> 
 
 import datetime, time
 import sys, os
 import pickle
 import re
+
 
 from collections import defaultdict
 
@@ -45,7 +46,8 @@ else:
 # In order to have a convenient access to high level functions, we
 # keep track of the current logbook in this global variable. 
 ONGOING_LOGBOOK = None
-old_print = print
+import builtins
+old_print = builtins.print
     
 # !SECTION! Printing
 # ==================
@@ -141,8 +143,10 @@ def pretty_result(r,
 
 
 def input_for_print(to_print):
-    """
-    # !TODO! documentation
+    """# !TODO! documentation
+
+    # !TODO! doesn't quite work as intended: need to check the format
+    # !of its input in log-event and how it handles it
 
     """
     if len(to_print) == 1:
@@ -387,10 +391,8 @@ class LogBook:
             "elapsed_time": {},
             "max_memory": None
         }
-        # setting up the printing function
-        self.display = print
-        global old_print
-        old_print = print
+        self.display = old_print
+
         
 
     # !SUBSECTION! Logging events and results
@@ -415,15 +417,16 @@ class LogBook:
             line = "{}{} {}".format(
                 "\n" if depth == 1 else "",
                 self.headings(depth),
-                heading
+                heading,
             )
             line = stylize(line, "purple")
             if depth == 1:
                 line = stylize(line, "bold")
+            line += stylize(" ({}) ".format(time_stamp()), "white")
             self.display(line)
         
         
-    def log_event(self, *event, desc="t"):
+    def log_event(self, *event, desc="t*"):
         tstamp = time_stamp()
         all_events = []
         for x in event:
@@ -455,13 +458,11 @@ class LogBook:
             self.enum_counter = None # stopping an enumeration (if any)
             full_event["type"] = "list"
             if self.verbose:
-                self.display(stylize(
-                    "{} {}{} {}".format(full_event["tstamp"],
-                                        self.bullet,
-                                        prefix_terminal,
-                                        input_for_print(full_event["content"])),
-                    style
-                ))
+                self.display(full_event["tstamp"] +
+                             stylize(" {}{} {}".format(self.bullet,
+                                                       prefix_terminal,
+                                                       input_for_print(full_event["content"])),
+                                     style))
         elif "n" in desc:       # -- numbered list
             if self.enum_counter == None:
                 self.enum_counter = 0
@@ -469,23 +470,19 @@ class LogBook:
                 self.enum_counter += 1
             full_event["type"] = "enum" + str(self.enum_counter)
             if self.verbose:
-                self.display(stylize(
-                    "{} {}.{} {}".format(full_event["tstamp"],
-                                         self.enum_counter,
-                                         prefix_terminal,
-                                         input_for_print(full_event["content"])),
-                    style
-                ))
+                self.display(full_event["tstamp"] +
+                             stylize(" {:2d}.{} {}".format(self.enum_counter,
+                                                           prefix_terminal,
+                                                           input_for_print(full_event["content"])),
+                                     style))
         else:                   # -- plain text
             self.enum_counter = None # stopping an enumeration (if any)
             full_event["type"] = "text"
             if self.verbose:
-                self.display(stylize(
-                    "{}{}{}".format(full_event["tstamp"],
-                                    prefix_terminal,
-                                    input_for_print(full_event["content"])),
-                    style
-                ))
+                self.display(full_event["tstamp"] +
+                             stylize("{}{}".format(prefix_terminal,
+                                                   input_for_print(full_event["content"])),
+                                     style))
         full_event["content"] = prefix_text + str(full_event["content"])
         self.story.append(full_event)
 
@@ -539,7 +536,7 @@ class LogBook:
                     ))
                 elif line["type"][:4] == "enum":
                     depth = int(line["type"][4:], 10)
-                    f.write("{}.{} {}\n".format(
+                    f.write("{}. {} {}\n".format(
                         depth,
                         line["tstamp"],
                         line["content"]
@@ -560,9 +557,6 @@ class LogBook:
     # !SUBSECTION! The functions needed by the "with" logic
 
     def __enter__(self):
-        global ONGOING_LOGBOOK, print
-        ONGOING_LOGBOOK = self
-        print = ONGOING_LOGBOOK.log_event
         if self.verbose:
             self.display("\n" + stylize(stylize(self.title, "bold"), "underline") + "\n")
         # handling the preamble (if relevant)
@@ -599,6 +593,10 @@ class LogBook:
             self.measurements["elapsed_time"][0] = Chronograph("The experiment")
         if self.with_mem:
             self.measurements["max_memory"] = MemTracer()
+        # setting up global variables
+        global ONGOING_LOGBOOK
+        ONGOING_LOGBOOK = self
+        builtins.print = self.log_event
         return self
     
 
@@ -658,8 +656,7 @@ class LogBook:
             ))
         self.save_to_file()
         # undoing global modifications
-        global print, old_print
-        print = old_print
+        builtins.print = old_print
         ONGOING_LOGBOOK = None
 
 
@@ -686,19 +683,23 @@ def SUCCESS(content):
 def FAIL(content):
     ONGOING_LOGBOOK.log_fail(content)
 
-def write(content, desc="t*"):
-    ONGOING_LOGBOOK.log_event(content, desc=desc)
+def N_FAILURES():
+    return ONGOING_LOGBOOK.fail_counter
+
+def N_SUCCESSES():
+    return ONGOING_LOGBOOK.success_counter
 
 
 # !SECTION! Post-processing of results
 # ====================================
 
 
-# !TODO! store baskets in a dedicated folder, and add a high-level
-# !script to dump their content. We need a post-processing module.
+# !TODO! add a high-level script to dump their content. We need a
+# !post-processing module.
 def archive_basket(results, file_name):
     with open(file_name, "wb") as f:
         pickle.dump(results, f)
+
 
 def open_basket(file):
     with open(file, "rb") as f:
@@ -795,3 +796,4 @@ if __name__ == "__main__":
     #     if sys.argv[1] == "grab":
     #         d = grab_last_basket(sys.argv[2:])
     #         print(d)
+

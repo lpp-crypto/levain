@@ -1,6 +1,5 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-08-26 21:02:15 leo>
-
+#+Time-stamp: <2024-09-13 16:15:41 leo>
 
 #+OPTIONS: html-style:nil toc:2 num:t
 #+HTML_HEAD: <link href="../style.css" rel="stylesheet" type="text/css" /> <link rel="stylesheet" href="https://files.inria.fr/dircom/extranet/fonts-inria-sans.css"> <link rel="stylesheet" href="https://files.inria.fr/dircom/extranet/fonts-inria-serif.css">
@@ -34,45 +33,7 @@
 
 
 * Design Approach
-** Sponge Construction
-*** Indirect Injection
-*** TODO implement better approach
-After two steps of SPARKLE512, the rates are statistically
-independent. Thus, in order to observe a correlation between random
-numbers, it is necessary to observe rates that are 4 steps apart, for
-which the correlation is at most 2^{-78} (according to Table 9 of the
-ToSC paper), meaning at least 2^{156} blocks: osef
-*** OBSOLETE Indirect Squeezing
-The following SAGE script displays the corresponding matrix and shows
-that it indeed has full rank.
 
-#+BEGIN_SRC python :tangle sparklyRG/indirect.py
-#!/usr/bin/sage
-
-from sage.all import GF, Matrix
-
-M = Matrix(GF(2), 8, 8, [
-    [1*(j in [i, (i+1)%8, (i+5)%8]) for j in range(0, 8)]
-    for i in range(0, 8)
-])
-print(M)
-print(M.rank())
-
-#+END_SRC
-
-** Varying Security Levels
-*** Full blown XOF (Esch)
-- Rate :: 384 bits
-- Rounds :: 8
-- Output method :: Truncation
-*** Entropy Diffusion Function (key schedule)
-- Rate :: 384 bits
-- Rounds :: 4
-- Output method :: Linear Leakage
-*** Unsafe but faster
-- Rate :: 384 bits
-- Rounds :: 2
-- Output method :: Linear Leakage
 * Core Implementation
 ** High Level Interface
 *** The Class
@@ -80,10 +41,12 @@ Let us first describe at a high level the way the SPARKLE-core
 works. It implements a sponge-based construction, meaning that it has
 an internal state of a fixed size (here, 512 bits, corresponding to
 two arrays of eight 32-bit words each). In order to manipulate such
-concepts, we need the C++ libraries =vector= and =cstdint=.
+concepts, we need the C++ libraries =vector= and =cstdint=. Since the
+internal state is of known size (512 bits), we use an =array= for it.
 #+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.hpp :main no
 #include<vector>
 #include<cstdint>
+#include<array>
 #+END_SRC
 
 We also need to put some basic macros from the [[https://github.com/cryptolu/sparkle/blob/master/software/sparkle/sparkle.c][original SPARKLE
@@ -144,8 +107,8 @@ when we use it to rebuild an output of the PRNG.
 #+NAME: attributes
 #+BEGIN_SRC cpp :main no
 unsigned int steps;
-std::vector<uint32_t> state;
-std::vector<uint64_t> entropy_tank;
+std::array<uint32_t, 2*N_BRANCHES> state;
+std::vector<bool> entropy_tank;
 unsigned int entropy_cursor;
 #+END_SRC
 
@@ -206,8 +169,8 @@ build this attribute here, along with the =entropy_cursor=.
 #+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 Sparkle512core::Sparkle512core():
     steps(0),
-    state(2*N_BRANCHES, 0),
-    entropy_tank(0, 0),
+    state{{0}},
+    entropy_tank(0, false),
     entropy_cursor(0) {}
 
 #+END_SRC
@@ -218,7 +181,7 @@ The other attributes are set using the =setup= method.
 void Sparkle512core::setup(const unsigned int _steps, const unsigned int _output_rate)
 {
     steps = _steps;
-    entropy_tank.assign(_output_rate, 0);
+    entropy_tank.assign(_output_rate, false);
 }
 #+END_SRC
 
@@ -289,7 +252,7 @@ void Sparkle512core::_squeeze()
         unsigned int k = i / 32; 
         tmp = state[k]; 
         for(unsigned int j=0; j<32; j++)
-            entropy_tank[i+j] = (tmp >> j) & 0x1;
+            entropy_tank[i+j] = (__builtin_parityll(state[k] >> j));
     }
     entropy_cursor = 0;
 }
@@ -307,15 +270,17 @@ Note that this method can only handle inputs smaller than the
 #+BEGIN_SRC cpp :tangle sparklyRG/sparkle512.cpp :main no
 void Sparkle512core::absorb(const std::vector<uint8_t> byte_array)
 {
+    state[2*N_BRANCHES-1] ^= 1;
     for(unsigned int i=0; i<byte_array.size(); i+=4)
+    {
         for(unsigned int j=0; j<4; j++)
             state[i >> 2] ^= ((uint32_t)byte_array[i + j]) << (8*j) ;
+    }
     _permute();
-    state[state.size()-1] ^= 1;
+    state[2*N_BRANCHES-1] ^= 2;
     _permute();
-    state[state.size()-1] ^= 2;
-    _permute();
-};
+    _squeeze();
+}
 
 
 #+END_SRC
@@ -342,8 +307,8 @@ uint64_t Sparkle512core::get_n_bit_unsigned_integer(const unsigned int n)
             _permute();
             _squeeze();
         }
-        result <<= 1;
-        result |= entropy_tank[entropy_cursor];
+        if (entropy_tank[entropy_cursor])
+            result |= (1 << i);
         entropy_cursor ++;
     }
     return result;
@@ -373,20 +338,6 @@ int main(int argc, char ** argv)
 #+END_SRC
 
 #+RESULTS:
-|   |  1 | 1 |
-|   |  6 | 3 |
-|   | 11 | 4 |
-|   | 16 | 5 |
-|   | 21 | 5 |
-|   | 26 | 5 |
-|   | 31 | 5 |
-|   | 36 | 6 |
-|   | 41 | 6 |
-|   | 46 | 6 |
-|   | 51 | 6 |
-|   | 56 | 6 |
-|   | 61 | 6 |
-|   | 66 | 7 |
 
 It does what we need! Writing the function =get_integer_in_range= is
 then trivial.
@@ -463,38 +414,27 @@ from declaration cimport *
 
 cdef class SparkleRG:
     cdef Sparkle512core core
-    steps: uint64_t
-    output_rate: uint64_t 
     
     def __init__(self, steps, output_rate):
         self.core = Sparkle512core()
-        self.steps = steps
-        self.output_rate = output_rate
-        self.core.setup(self.steps, self.output_rate)
+        self.core.setup(steps, output_rate)
 
 
     def absorb(self, x):
-        # handling padding
-        to_absorb = x + bytearray([0] * (48 - len(x)))
+        to_absorb = x + b"1" + b"0"*(63 - len(x))
         self.core.absorb(to_absorb)
 
-
+        
     def get_n_bit_unsigned_integer(self, n):
         if n > 64:
             raise Exception("Cannot return integers more than 64-bit long")
         return self.core.get_n_bit_unsigned_integer(n)
 
+    
     def __call__(self, lower, upper):
         if upper <= lower:
             raise Exception("`upper` must be strictly higher than `lower`")
         return self.core.get_unsigned_integer_in_range(lower, upper)
-
-    def __str__(self):
-        return "SparklyRG({},{}) ; absorbed={}".format(
-            self.steps,
-            self.output_rate,
-            []
-        )
 #+END_SRC
 
 ** Compiling
@@ -521,7 +461,7 @@ if platform == 'darwin':    #macOs
 else:
     os.environ["CC"] = "g++"
     os.environ["CXX"] = "g++"
-    extra_compile_args = ["-O3", "-march=native", "-std=c++17", "-pthread", "-Wall"]
+    extra_compile_args = ["-O3", "-march=native", "-std=c++17", "-pthread", "-Wall", "-ffast-math"]
     extra_link_args=[]
 
 HOME = os.path.expanduser('~')
@@ -546,13 +486,117 @@ module_sparklyRG = Extension("wrapper",
 setup(name='wrapper', ext_modules=cythonize([module_sparklyRG], language_level = "3"))
 #+END_SRC
 
-** Making a module
-We are going to provide additional functionalities in the module, but
-for now we simply create the necessary file so that we can run some
-tests on the =SparkleRG= low-level class.
+** The SparklyRG Module
+The =SparkleRG= works as a high-ish level class, but having more
+functionalities would be convenient. To this end, we define a
+regular Python class (rather than a cython one): =EschRG=.
 
-#+BEGIN_SRC python :tangle sparklyRG/__init__.py
+*** EschRG
+
+In order to enjoy the very good speed from the original class, we have
+this one simply inherit from it: that way, the =__call__= function will
+be literally the same as before. However, for ease of repeatability,
+we also:
+- prevent the use of un-initialized instances,
+- store all that is absorbed so that we can print it in the string
+  representation,
+- make sure that the string representation allows a simple reuse of
+  an identical instance of the primitive.
+
+
+#+BEGIN_SRC python :tangle sparklyRG/__init__.py :noweb yes
 from .wrapper import *
+import datetime
+    
+
+class EschRG(SparkleRG):
+    <<EschRG-init>>        
+    <<EschRG-str>>  
+    <<EschRG-absorb_block>>        
+    <<EschRG-random_permutation>>
+#+END_SRC
+
+**** EschRG Initialization
+#+NAME: EschRG-init
+#+BEGIN_SRC python :noweb yes
+def __init__(self, seeds, with_time=False):
+    """Initializes an EschRG instance, i.e. a deterministic
+    pseudo-random number generator inheriting its security from
+    that of the SPARKLE-based NIST finalist Esch.
+
+    Parameters:
+
+    - `seeds`: a list of objects or an object to be used as the
+      PRNG seed.
+
+    - `with_time` (defaults to `False`): if set, the current UNIX
+      time is used as an additional seed.
+
+    If you use an Esch instance in your code, printing it will
+    give you a piece of valid Python code that you can use to
+    create an identically initialized EschRG instance.
+
+    """
+    SparkleRG.__init__(self, 8, 256)
+    self.absorbed = []
+    blocks = []
+    if isinstance(seeds, list):
+        blocks = seeds[:]
+    else:
+        blocks.append(seeds)
+    if with_time:
+        time_string = datetime.datetime.now().isoformat(" ").split(".")[0]
+        blocks.append(time_string.encode("UTF-8"))
+    for x in blocks:
+        self._absorb_block(x)
+#+END_SRC
+
+**** EschRG to string
+#+NAME: EschRG-str
+#+BEGIN_SRC python :noweb yes
+def __str__(self):
+    return "EschRG({})".format(self.absorbed)
+#+END_SRC
+
+**** EschRG absorbtion
+#+NAME: EschRG-absorb_block
+#+BEGIN_SRC python :noweb yes
+def _absorb_block(self, x):
+    """Absorbs `x` into the state, performing some boring
+    operations along the way to handle inputs of different
+    types. You are not really supposed to use it.
+
+    """
+    if isinstance(x, bytes):
+        to_absorb = x
+    elif isinstance(x, str):
+        to_absorb = x.encode("UTF-8")
+    else:
+        to_absorb = str(x).encode("UTF-8")
+    if len(to_absorb) > 31:
+            raise Exception("block is too big, max length is 31 bytes")
+    else:
+        self.absorbed.append(to_absorb)
+        self.absorb(to_absorb)
+#+END_SRC
+
+**** EschRG: generating a random permutation
+#+NAME: EschRG-random_permutation
+#+BEGIN_SRC python :noweb yes
+def random_permutation(self, v_size):
+    """Returns the set of integers {0,...,v_size-1} after
+    undergoing a permutation picked uniformly at random.
+
+    Relies on a Fisher-Yates shuffle to do so.
+
+    https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+
+    """
+    result = list(range(0, v_size))
+    for i in range(0, v_size):
+        j = self(i, v_size)
+        result[i], result[j] = result[j], result[i]
+    return result
 #+END_SRC
 
 * Some Tests
@@ -662,6 +706,30 @@ It is as expected: the sponge is not seeded, so we start with only
 zeroes until the permutation is finally called. Then, we have balanced
 looking outputs of a plausible length.
 
+** Repeating
+Running the following SAGE script will let us see what the output of
+the PRNG looks like with 4 rounds of mixing.
+
+#+BEGIN_SRC python :tangle test_sparkle_repeat.py
+#!/usr/bin/sage
+
+from sage.all import *
+from sparklyRG import *
+
+prg = EschRG(b"seed", with_time=True)
+for i in range(0, 10):
+    print("{:08x}".format(prg(0, 2**32)))
+print("\nreseeding\n")
+prg_prime = EschRG([b'seed', b'2024-08-28 16:14:10'])
+for i in range(0, 10):
+    print("{:08x}".format(prg_prime(0, 2**32)))
+print("\n")
+print(prg)
+print(prg_prime)
+
+
+
+#+END_SRC
 ** Comparison with =randint=
 SAGE has a built-in function to output random numbers in a given range
 called =randint=. It has an annoying interface in that it differs from
@@ -669,7 +737,7 @@ that of =range=: =randint= can reach its second output, unlike =range=. If
 =range(0,1)= is basically =[0]=, =randint(0,1)= can be either =0= or =1=.
 
 Running the following SAGE script will let us see what the output of
-the PRNG looks like with 4 rounds of mixing.
+the PRNG looks like with =R= rounds of mixing.
 
 #+BEGIN_SRC python :tangle test_sparkle_range.py
 #!/usr/bin/sage
@@ -686,33 +754,51 @@ global SECTION, SUBSECTION, SUBSUBSECTION, print, to_basket, SUCCESS, FAIL
 from logbook import *
 
 
-
-with LogBook("Comparing SPARKLE and =randint="):
-    SECTION("Initialization")
-    prg = SparkleRG(8, 256)
-    prg.absorb(str(time.time()).encode("UTF-8"))
-    print(prg)
-        
+with LogBook("Comparing SPARKLE-{} and =randint=", with_mem=False):
     n_bins = 65 #prg(50, 100)
-    expected_bin_size = 2**15
-    print(n_bins)
+    expected_bin_size = 2**18
+    to_basket("bin size", n_bins, desc="l*")
     sample_size = n_bins * expected_bin_size
 
-    SECTION("Calling PRNGs")
-    counters_sparkle = [0 for x in range(0, n_bins)]
-    counters_randint = [0 for x in range(0, n_bins)]
     
-    SUBSECTION("SPARKLE-based", timed=True)
-    for i in range(0, sample_size):
-        counters_sparkle[prg(0, n_bins)] += 1
 
-    SUBSECTION("randint", timed=True)
-    for i in range(0, sample_size):
-        counters_randint[randint(0, n_bins-1)] += 1
+    counters_eschrg  = [0 for x in range(0, n_bins)]
 
-    SECTION("Computing biases")
-    biases_sparkle = defaultdict(int)
-    biases_randint = defaultdict(int)
+    # SECTION("Testing the SPARKLE-based PRNG")
+    # R = 8
+    # prg = SparkleRG(R, 256)
+    # counters_sparkle = [0 for x in range(0, n_bins)]
+    # SUBSECTION("Running with R={}".format(R), timed=True)
+    # for i in range(0, sample_size):
+    #     counters_sparkle[prg(0, n_bins)] += 1
+    # SUBSECTION("Results")
+    # biases_sparkle = defaultdict(int)
+    # for k in range(0, n_bins):
+    #     biases_sparkle[counters_sparkle[k] - expected_bin_size] = k
+    # write({"min bias": min(biases_sparkle.keys()),
+    #        "max bias": max(biases_sparkle.keys())})
+
+    # SECTION("Testing randint")
+    # counters_randint = [0 for x in range(0, n_bins)]
+    # SUBSECTION("Running randint", timed=True)
+    # for i in range(0, sample_size):
+    #     counters_randint[randint(0, n_bins-1)] += 1
+    # SUBSECTION("Results")
+    # biases_randint = defaultdict(int)
+    # for k in range(0, n_bins):
+    #     biases_randint[counters_randint[k] - expected_bin_size] = k
+    # write({"min bias": min(biases_randint.keys()),
+    #        "max bias": max(biases_randint.keys())})
+        
+    SECTION("Testing EschRG")
+    SUBSECTION("Initializing")
+    esch = EschRG(b"seed", with_time=True)
+    print(esch)
+    SUBSECTION("Running", timed=True)
+    for i in range(0, sample_size):
+        counters_eschrg[esch(0, n_bins)] += 1
+    SUBSECTION("Results")
+    biases_eschrg = defaultdict(int)
     for k in range(0, n_bins):
         biases_sparkle[counters_sparkle[k] - expected_bin_size] = k
         biases_randint[counters_randint[k] - expected_bin_size] = k
@@ -732,3 +818,16 @@ with LogBook("Comparing SPARKLE and =randint="):
 
 
 
+*** Some comments
+- Number of steps :: This quantity has a very small impact on the time
+  complexity.
+- Bit fiddling :: I suspected the bit-fiddling done when outputting
+  fixed-length integers to be time consuming, but bypassing entirely
+  both this step and the calls to the permutation (i.e. by having
+  =get_unsigned_integer_in_range= to always return the same thing) leads
+  to a run time that is only marginally faster: most of the time is
+  spent elsewhere, probably in between SAGE and Python.
+
+This doesn't leave much room for speed improvements, and it also means
+that there isn't really a reason to use fewer rounds: we go with the
+full "slim" instance with 8 steps.

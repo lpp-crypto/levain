@@ -2,14 +2,14 @@
 
 Sparkle512core::Sparkle512core():
     steps(0),
-    state(2*N_BRANCHES, 0),
-    entropy_tank(0, 0),
+    state{{0}},
+    entropy_tank(0, false),
     entropy_cursor(0) {}
 
 void Sparkle512core::setup(const unsigned int _steps, const unsigned int _output_rate)
 {
     steps = _steps;
-    entropy_tank.assign(_output_rate, 0);
+    entropy_tank.assign(_output_rate, false);
 }
 
 void Sparkle512core::_permute()
@@ -67,22 +67,24 @@ void Sparkle512core::_squeeze()
         unsigned int k = i / 32; 
         tmp = state[k]; 
         for(unsigned int j=0; j<32; j++)
-            entropy_tank[i+j] = (tmp >> j) & 0x1;
+            entropy_tank[i+j] = (__builtin_parityll(state[k] >> j));
     }
     entropy_cursor = 0;
 }
 
 void Sparkle512core::absorb(const std::vector<uint8_t> byte_array)
 {
+    state[2*N_BRANCHES-1] ^= 1;
     for(unsigned int i=0; i<byte_array.size(); i+=4)
+    {
         for(unsigned int j=0; j<4; j++)
             state[i >> 2] ^= ((uint32_t)byte_array[i + j]) << (8*j) ;
+    }
     _permute();
-    state[state.size()-1] ^= 1;
+    state[2*N_BRANCHES-1] ^= 2;
     _permute();
-    state[state.size()-1] ^= 2;
-    _permute();
-};
+    _squeeze();
+}
 
 uint64_t Sparkle512core::get_n_bit_unsigned_integer(const unsigned int n)
 {
@@ -94,8 +96,8 @@ uint64_t Sparkle512core::get_n_bit_unsigned_integer(const unsigned int n)
             _permute();
             _squeeze();
         }
-        result <<= 1;
-        result |= entropy_tank[entropy_cursor];
+        if (entropy_tank[entropy_cursor])
+            result |= (1 << i);
         entropy_cursor ++;
     }
     return result;

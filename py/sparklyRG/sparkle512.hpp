@@ -1,5 +1,6 @@
 #include<vector>
 #include<cstdint>
+#include<array>
 
 #define ROT(x, n) (((x) >> (n)) | ((x) << (32-(n))))
 #define ELL(x) (ROT(((x) ^ ((x) << 16)), 16))
@@ -14,8 +15,8 @@ static const uint32_t RCON[N_BRANCHES] = {
 class Sparkle512core {
 private:
     unsigned int steps;
-    std::vector<uint32_t> state;
-    std::vector<uint64_t> entropy_tank;
+    std::array<uint32_t, 2*N_BRANCHES> state;
+    std::vector<bool> entropy_tank;
     unsigned int entropy_cursor;
     public:
     Sparkle512core();

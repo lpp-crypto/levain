@@ -1,8 +1,8 @@
 #/usr/bin/sage
 # -*- Python -*-
-# Time-stamp: <2024-08-08 17:24:45 leo>
+# Time-stamp: <2024-08-27 11:11:56 lperrin>
 
 
-from .prg import *
+from .sparklyRG import *
 from .logbook import *
 

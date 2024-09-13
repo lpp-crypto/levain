@@ -10,7 +10,7 @@ if platform == 'darwin':    #macOs
 else:
     os.environ["CC"] = "g++"
     os.environ["CXX"] = "g++"
-    extra_compile_args = ["-O3", "-march=native", "-std=c++17", "-pthread", "-Wall"]
+    extra_compile_args = ["-O3", "-march=native", "-std=c++17", "-pthread", "-Wall", "-ffast-math"]
     extra_link_args=[]
 
 HOME = os.path.expanduser('~')

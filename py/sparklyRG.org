@@ -1,5 +1,5 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-08-26 20:55:39 leo>
+#+Time-stamp: <2024-08-26 21:02:15 leo>
 
 
 #+OPTIONS: html-style:nil toc:2 num:t
@@ -728,8 +728,6 @@ with LogBook("Comparing SPARKLE and =randint="):
     for k in sorted(biases_randint.keys()):
         line += "{}: {},  ".format(k, biases_randint[k])
     print(line)
-
-    SUCCESS("so?")
 #+END_SRC
 
 

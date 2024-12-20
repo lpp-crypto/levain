@@ -1,6 +1,5 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-12-16 17:22:23>
-
+#+Time-stamp: <2024-12-20 17:46:57>
 
 #+OPTIONS: html-style:nil toc:2 num:t
 #+HTML_HEAD: <link href="../style.css" rel="stylesheet" type="text/css" /> <link rel="stylesheet" href="https://files.inria.fr/dircom/extranet/fonts-inria-sans.css"> <link rel="stylesheet" href="https://files.inria.fr/dircom/extranet/fonts-inria-serif.css">
@@ -803,9 +802,20 @@ with LogBook("Comparing SPARKLE-{} and =randint=", with_mem=False):
     SUBSECTION("Results")
     biases_eschrg = defaultdict(int)
     for k in range(0, n_bins):
-        biases_eschrg[counters_eschrg[k] - expected_bin_size] = k
-    write({"min bias": min(biases_eschrg.keys()),
-           "max bias": max(biases_eschrg.keys())})
+        biases_sparkle[counters_sparkle[k] - expected_bin_size] = k
+        biases_randint[counters_randint[k] - expected_bin_size] = k
+    
+    SUBSECTION("sparkle")
+    line = ""
+    for k in sorted(biases_sparkle.keys()):
+        line += "{}: {},  ".format(k, biases_sparkle[k])
+    print(line)
+    
+    SUBSECTION("randint")
+    line = ""
+    for k in sorted(biases_randint.keys()):
+        line += "{}: {},  ".format(k, biases_randint[k])
+    print(line)
 #+END_SRC
 
 

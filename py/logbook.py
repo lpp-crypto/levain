@@ -1,14 +1,15 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-08-30 14:58:52 lperrin> 
+# Time-stamp: <2024-12-18 15:55:35> 
 
 import datetime, time
 import sys, os
 import pickle
 import re
-
+from alive_progress import alive_bar
 
 from collections import defaultdict
+
 
 
 # !SECTION! Setting up default parameters and the context 
@@ -158,7 +159,10 @@ def input_for_print(to_print):
         return result[:-1]
         
 
+
 # !SECTION! Measuring tools
+# =========================
+
 
 class Chronograph:
     def __init__(self, title):
@@ -207,7 +211,7 @@ class MemTracer:
         )
         
 
-    
+
 
 # !SECTION! The LogBook class
 
@@ -385,13 +389,15 @@ class LogBook:
         self.basket = {}
         self.story = []
         self.enum_counter = None
-        self.success_counter = 0
-        self.fail_counter = 0
+        self.investigated = None
         self.measurements = {
             "elapsed_time": {},
             "max_memory": None
         }
         self.display = old_print
+        self.success_counter = 0
+        self.fail_counter = 0
+        self.care_about_success_or_fail = False
 
         
 
@@ -496,6 +502,7 @@ class LogBook:
 
 
     def log_success(self, *args):
+        self.care_about_success_or_fail = True
         text = [x for x in args]
         if len(text) > 0:
             to_print = input_for_print(text)
@@ -506,6 +513,7 @@ class LogBook:
 
         
     def log_fail(self, *args):
+        self.care_about_success_or_fail = True
         text = [x for x in args]
         if len(text) > 0:
             to_print = input_for_print(text)
@@ -569,9 +577,10 @@ class LogBook:
                 desc="l*"
             )
             self.log_event(
-                "Running script {} with command line args {}.".format(
-                    __file__,
-                    sys.argv
+                "Running script {}/{} with command line args {}.".format(
+                    os.path.dirname(os.getcwd()),
+                    os.path.basename(sys.argv[0]),
+                    sys.argv[1:]
                 ),
                 desc="l*"
             )
@@ -624,11 +633,11 @@ class LogBook:
             else:
                 basket_description = "basket was filled"
             self.section(3, basket_description)
-            for k in sorted(self.basket.keys()):
+            for k in self.basket.keys():
                 self.display("{} {}: {}".format(self.bullet,
                                                 k,
                                                 len(self.basket[k])))
-            if self.success_counter > 0 or self.fail_counter > 0:
+            if self.care_about_success_or_fail:
                 self.section(3, "Successes and Failures")
                 total = self.success_counter + self.fail_counter
                 line = "- successes: {}".format(self.success_counter)
@@ -660,12 +669,34 @@ class LogBook:
         ONGOING_LOGBOOK = None
 
 
+    # !SUBSECTION! Pretty loops
+    
+    def loop_over(self, some_set, text):
+        """Uses alive_progress to generate a pre-configured progress
+        bar that ends when `some_set` has been fully iterated
+        over. `text` is a description of the set being looped over.
+
+        """
+        with alive_bar(total=len(some_set),
+                       title="looping over " + text,
+                       enrich_print=False) as pretty_bar:
+            for i in some_set:
+                # !TOSTART! do something clever about the context (use self.investigated somewhere)
+                #self.investigated = i
+                yield i
+                pretty_bar()
+            
+
+    
+
 # !SUBSECTION! Using the current LogBook instance
 
 
 # !TODO! write the documentation of these functions 
 
-def SECTION(heading, timed=False):
+# !SUBSUBSECTION! Table of content
+
+def SECTION(heading, timed=True):
     ONGOING_LOGBOOK.section(1, heading, with_timer=timed)
     
 def SUBSECTION(heading, timed=False):
@@ -676,6 +707,14 @@ def SUBSUBSECTION(heading, timed=False):
 
 def to_basket(key, entry, desc="t*"):
     ONGOING_LOGBOOK.log_to_basket(key, entry, desc=desc)
+
+
+# !SUBSUBSECTION!  Pretty loop
+
+def ELEMENTS_OF(some_set, text):
+    return ONGOING_LOGBOOK.loop_over(some_set, text)
+
+# !SUBSUBSECTION!  Success/failures
 
 def SUCCESS(content):
     ONGOING_LOGBOOK.log_success(content)

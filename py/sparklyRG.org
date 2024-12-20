@@ -1,5 +1,5 @@
 #+TITLE: Generating (Secure) Pseudo-Random Data with SPARKLE512
-#+Time-stamp: <2024-08-28 16:14:34 lperrin>
+#+Time-stamp: <2024-12-16 17:22:23>
 
 
 #+OPTIONS: html-style:nil toc:2 num:t
@@ -14,7 +14,7 @@
   (setq org-html-home/up-format "
   <div id=\"org-div-home-and-up\">
       <a href=\"https://www.rocq.inria.fr/secret/index.php\">Cosmiq Homepage</a>
-      |
+k      |
       <a href=\"../index.html\">Léo Perrin's Homepage</a>
       |
       <a href=\"./rescale.html\">ReSCALE</a>
@@ -369,6 +369,8 @@ the following shell command:
 #+BEGIN_SRC sh
 sage setup.py build_ext --inplace
 #+END_SRC
+
+#+RESULTS:
 
 However, for this compilation to work in the first place, we need to
 do write bunch of boilerplate in a bunch of different files.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Time-stamp: <2025-01-05 21:14:01>
+# Time-stamp: <2025-01-05 21:43:26>
 
 import re
 
@@ -230,7 +230,7 @@ if __name__ == "__main__":
         "blublu",
         "code ++",
         "  !bla!   stufff",
-        "  ! and also stufff stuff blabli"
+        "  ! and also stufff stuff blabli",
         "code ++",
         " !blu! jcoqidkcj",
         " test test",
@@ -243,7 +243,7 @@ if __name__ == "__main__":
         "!TODO! something non-sensical",
         " stuff",
         "!TODO! something rather sensical",
-        "// ! let's be serious for once"
+        "// ! let's be serious for once",
         " blu blue",
         "!SECTION! another section"
     ]

@@ -1,12 +1,12 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-12-18 15:55:35> 
+# Time-stamp: <2025-01-08 17:27:27> 
 
 import datetime, time
 import sys, os
 import pickle
 import re
-from alive_progress import alive_bar
+from rich.progress import Progress
 
 from collections import defaultdict
 
@@ -395,10 +395,15 @@ class LogBook:
             "max_memory": None
         }
         self.display = old_print
+        # -- successes
         self.success_counter = 0
         self.fail_counter = 0
         self.care_about_success_or_fail = False
-
+        # -- loops
+        self.loop_depth = 0
+        self.progress_tracker = Progress(transient=True)
+        self.progress_tracker.__enter__()
+            
         
 
     # !SUBSECTION! Logging events and results
@@ -610,6 +615,7 @@ class LogBook:
     
 
     def __exit__(self, *args):
+        self.progress_tracker.__exit__(0, 0, 0)
         if self.with_conclusion:
             self.section(1, "Conclusion")
             if self.with_time or self.with_mem:
@@ -667,24 +673,30 @@ class LogBook:
         # undoing global modifications
         builtins.print = old_print
         ONGOING_LOGBOOK = None
+        
 
 
     # !SUBSECTION! Pretty loops
     
     def loop_over(self, some_set, text):
-        """Uses alive_progress to generate a pre-configured progress
+        """Uses rich to generate a pre-configured progress
         bar that ends when `some_set` has been fully iterated
         over. `text` is a description of the set being looped over.
 
         """
-        with alive_bar(total=len(some_set),
-                       title="looping over " + text,
-                       enrich_print=False) as pretty_bar:
-            for i in some_set:
-                # !TOSTART! do something clever about the context (use self.investigated somewhere)
-                #self.investigated = i
-                yield i
-                pretty_bar()
+        self.loop_depth += 1
+        if self.loop_depth > 1:
+            title = "{} {} ".format(" " * (self.loop_depth-1) + "└", text)
+        else:
+            title = "[red]{} ".format(text)
+        task = self.progress_tracker.add_task(title, total=len(some_set))
+        print(task)
+        for i in some_set:
+            # !TOSTART! do something clever about the context (use self.investigated somewhere)
+            #self.investigated = i
+            yield i
+            self.progress_tracker.update(task, advance=1)
+        self.loop_depth -= 1
             
 
     
@@ -830,9 +842,15 @@ def test_logbook():
 
 
 if __name__ == "__main__":
-    test_logbook()
+    #test_logbook()
     # if len(sys.argv) > 1:
     #     if sys.argv[1] == "grab":
     #         d = grab_last_basket(sys.argv[2:])
     #         print(d)
+    with LogBook("loop test"):
+        for x in ELEMENTS_OF(range(0, 4), "main loop"):
+            print(x)
+            for y in ELEMENTS_OF(range(0, 3), "secondary loop"):
+                for z in ELEMENTS_OF(range(0, 3), "tertiary loop"):
+                    time.sleep(0.3)
 

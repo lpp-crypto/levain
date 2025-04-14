@@ -1,6 +1,6 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2024-12-18 15:55:35> 
+# Time-stamp: <2025-04-14 18:27:24> 
 
 import datetime, time
 import sys, os
@@ -489,7 +489,7 @@ class LogBook:
                              stylize("{}{}".format(prefix_terminal,
                                                    input_for_print(full_event["content"])),
                                      style))
-        full_event["content"] = prefix_text + str(full_event["content"])
+        full_event["content"] = prefix_text + input_for_print(full_event["content"])
         self.story.append(full_event)
 
             

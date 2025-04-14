@@ -1,5 +1,5 @@
 #+TITLE: Meuporg: Keeping track of research projects
-#+Time-stamp: <2025-01-04 21:23:40>
+#+Time-stamp: <2025-04-13 20:38:48>
 
 * Goal
 ** /The Problem/®
@@ -40,9 +40,56 @@ are likely to shared using some VCS. As a consequence:
 - Describing the project: mapping script
 ** Automated mapping
 - python script
+* Meuporg Parser
+
+#+BEGIN: meuporg :path "~/research/sbox-utils/" :ignore "fftw Cmake known_functions build"
+* /home/leo/research/sbox-utils/
+** /home/leo/research/sbox-utils/sboxU/
+*** analysis.py [[file:/home/leo/research/sbox-utils/sboxU/analysis.py][(→)]]
+**** Structural anomalies [[file:/home/leo/research/sbox-utils/sboxU/analysis.py::162][(→)]]
+- TODO :: [[file:/home/leo/research/sbox-utils/sboxU/analysis.py::226][(→)]] evaluate the anomaly of all cycle types
+**** Automated analysis [[file:/home/leo/research/sbox-utils/sboxU/analysis.py::320][(→)]]
+***** Main class [[file:/home/leo/research/sbox-utils/sboxU/analysis.py::355][(→)]]
+- CONTINUE :: [[file:/home/leo/research/sbox-utils/sboxU/analysis.py::452][(→)]] Finish automated TU analysis
+- TODO :: [[file:/home/leo/research/sbox-utils/sboxU/analysis.py::461][(→)]] advanced analysis
+
+
+#+END
+
 * Emacs integration
 ** org-mode
 - meup.org as agenda files
+** TOSTART mini-map
+:Logbook:
+- State "TOSTART"    from              [2025-04-13 dim. 20:38]
+:END:
+Use the python parser to generate the mini-map
+** map block
+Now that parser runs, we need a convenient way to put its output inside an org file. This is achieved using [[https://orgmode.org/manual/Dynamic-Blocks.html][dynamic blocks]]. These replace their content with the output of an elisp function that needs to have names of a specific form: =org-dblock-write:<some name>=. Here, we let =<some name>= be =meuporg=, for when we want a sparse tree, and =meuporg-full-tree= for when we don't. The syntax of these blocks allows the passing of arguments: =:path= will correspond to the path to the folder under investigation, and =:ignore= to a list strings/regexps. Any file whose full path matches at least one of these regexps will be ignored.
+
+Then it is simply a matter of building the shell command using these arguments, and assuming that the =meuporg= parser is somewhere in your =$PATH=.
+
+#+BEGIN_SRC elisp
+(defun org-dblock-write:meuporg(params)
+  (let ((to-ignore (plist-get params :ignore))
+        (path (plist-get params :path)))
+    (insert (shell-command-to-string (concat "meuporg " path " -i " to-ignore)))
+))
+
+(defun org-dblock-write:meuporg-full-tree(params)
+  (let ((to-ignore (plist-get params :ignore))
+        (path (plist-get params :path)))
+    (insert (shell-command-to-string (concat "meuporg " path " -a -i " to-ignore)))
+))
+#+END_SRC
+
+The syntax of the blocks is then as follows.
+
+#+BEGIN_SRC org
+,#+BEGIN: meuporg :path "~/levain/" :ignore "*.pyc"
+,#+END
+#+END_SRC
+
 
 ** Telling emacs about the structure
 - projectile integration
@@ -50,6 +97,21 @@ are likely to shared using some VCS. As a consequence:
 - the .dir-local.el files
 - meuporg-mode
 
+#+BEGIN_SRC elisp
+
+(defun pi2-6-outline-level ()
+  (- (match-end 0) (match-beginning 0)))
+
+(defun pi2-6-outline-minor-mode()
+  (interactive)
+  (when (not (string= major-mode "org-mode"))
+    (progn
+      (setq-local outline-regexp ".*!\\(SUB\\)*SECTION!")
+      (setq-local outline-heading-end-regexp "\n")
+      (setq-local outline-level #'pi2-6-outline-level)
+      (outline-minor-mode)
+  )))
+#+END_SRC
 
 ** elisp
 *** The meuporg-list minor mode
@@ -293,4 +355,4 @@ moving to the location of the item."
             (toggle-truncate-lines 1)
 	    (display-line-numbers-mode -1)))
 #+END_SRC
-** python script
+

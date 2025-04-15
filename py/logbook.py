@@ -1,6 +1,6 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2025-01-08 17:27:27> 
+# Time-stamp: <2025-01-10 16:35:58> 
 
 import datetime, time
 import sys, os
@@ -139,7 +139,7 @@ def pretty_result(r,
         if "sage.matrix" in str(type(r)):
             return pretty_result([[x for x in row] for row in r.rows()])
         else:
-            pass
+            return str(r)
     return str(r)
 
 
@@ -386,6 +386,7 @@ class LogBook:
         self.with_conclusion = with_conclusion
         self.title = title
         # initializing the state
+        self.loop_depth = 0
         self.basket = {}
         self.story = []
         self.enum_counter = None
@@ -399,10 +400,6 @@ class LogBook:
         self.success_counter = 0
         self.fail_counter = 0
         self.care_about_success_or_fail = False
-        # -- loops
-        self.loop_depth = 0
-        self.progress_tracker = Progress(transient=True)
-        self.progress_tracker.__enter__()
             
         
 
@@ -615,7 +612,6 @@ class LogBook:
     
 
     def __exit__(self, *args):
-        self.progress_tracker.__exit__(0, 0, 0)
         if self.with_conclusion:
             self.section(1, "Conclusion")
             if self.with_time or self.with_mem:
@@ -684,19 +680,30 @@ class LogBook:
         over. `text` is a description of the set being looped over.
 
         """
+        # we (re)initialize the progress tracker if we get to depth 0
+        if self.loop_depth == 0:
+            self.progress_tracker = Progress(transient=True)
+            self.progress_tracker.__enter__()
+        # dealing with the current loop
         self.loop_depth += 1
         if self.loop_depth > 1:
             title = "{} {} ".format(" " * (self.loop_depth-1) + "└", text)
         else:
             title = "[red]{} ".format(text)
-        task = self.progress_tracker.add_task(title, total=len(some_set))
-        print(task)
+        if "__len__" in dir(some_set):
+            task = self.progress_tracker.add_task(title, total=len(some_set))
+        else:
+            task = self.progress_tracker.add_task(title)
         for i in some_set:
             # !TOSTART! do something clever about the context (use self.investigated somewhere)
             #self.investigated = i
             yield i
             self.progress_tracker.update(task, advance=1)
+        # undoing the depth increase once this loop is finished
         self.loop_depth -= 1
+        if self.loop_depth == 0:
+            self.progress_tracker.__exit__(0, 0, 0)
+
             
 
     

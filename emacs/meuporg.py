@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# Time-stamp: <2025-01-05 21:14:01>
+#!/usr/bin/env python3
+# Time-stamp: <2025-01-06 10:37:29>
 
 import re
 

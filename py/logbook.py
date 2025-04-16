@@ -1,6 +1,6 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2025-04-15 10:44:54> 
+# Time-stamp: <2025-04-15 16:39:30> 
 
 import datetime, time
 import sys, os
@@ -723,6 +723,9 @@ def SUBSECTION(heading, timed=False):
     
 def SUBSUBSECTION(heading, timed=False):
     ONGOING_LOGBOOK.section(3, heading, with_timer=timed)
+    
+def PARAGRAPH(heading, timed=False):
+    ONGOING_LOGBOOK.section(4, heading, with_timer=timed)
 
 def to_basket(key, entry, desc="t*"):
     ONGOING_LOGBOOK.log_to_basket(key, entry, desc=desc)

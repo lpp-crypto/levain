@@ -1,5 +1,5 @@
 #+TITLE: Meuporg: Keeping track of research projects
-#+Time-stamp: <2025-04-13 20:38:48>
+#+Time-stamp: <2025-04-16 16:15:32>
 
 * Goal
 ** /The Problem/®
@@ -67,7 +67,7 @@ Use the python parser to generate the mini-map
 ** map block
 Now that parser runs, we need a convenient way to put its output inside an org file. This is achieved using [[https://orgmode.org/manual/Dynamic-Blocks.html][dynamic blocks]]. These replace their content with the output of an elisp function that needs to have names of a specific form: =org-dblock-write:<some name>=. Here, we let =<some name>= be =meuporg=, for when we want a sparse tree, and =meuporg-full-tree= for when we don't. The syntax of these blocks allows the passing of arguments: =:path= will correspond to the path to the folder under investigation, and =:ignore= to a list strings/regexps. Any file whose full path matches at least one of these regexps will be ignored.
 
-Then it is simply a matter of building the shell command using these arguments, and assuming that the =meuporg= parser is somewhere in your =$PATH=.
+Then it is simply a matter of building the shell command using these arguments, and assuming that the =meuporg= parser is somewhere in your =$PATH=. This is done by adding the following =elisp= functions.
 
 #+BEGIN_SRC elisp
 (defun org-dblock-write:meuporg(params)
@@ -83,7 +83,7 @@ Then it is simply a matter of building the shell command using these arguments, 
 ))
 #+END_SRC
 
-The syntax of the blocks is then as follows.
+The syntax of a block intended to contain the =meuporg= tree of this whole project would then be as follows.
 
 #+BEGIN_SRC org
 ,#+BEGIN: meuporg :path "~/levain/" :ignore "*.pyc"

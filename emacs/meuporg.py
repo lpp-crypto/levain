@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Time-stamp: <2025-04-15 10:44:23>
+# Time-stamp: <2025-04-16 11:22:56>
 
 import re
 import os
@@ -20,6 +20,7 @@ STD_IGNORE_FILES = [
 STD_IGNORE_FOLDERS = [
     re.compile(r"\..*"),
     re.compile(r".*CMake.*"),
+    re.compile(r".*auto.*"),
     "__pycache__"
 ]
 
@@ -27,12 +28,15 @@ VALID_EXTENSIONS = [re.compile(r".*\.{}$".format(ext))
     for ext in [
             "c", "cpp", "h", "hpp", "cc", "hh",
             "py", "sage",
-            "txt",
+            "txt", "tex",
             "org", "md",
             "sh", "zsh",
             "el"
     ]
 ]
+
+# the following is used to simplify links
+HOME_DIR_LENGTH = len(os.path.realpath(os.path.expanduser("~")))
 
 # !SECTION! Identifying and parsing items
 # =======================================
@@ -356,6 +360,11 @@ def parse_folder(folder_name,
 # !SUBSECTION! Formatting the tree
 # --------------------------------
 
+def simplify_path(file_path):
+    file_path = os.path.realpath(file_path)
+    file_path = "~" + file_path[HOME_DIR_LENGTH:]
+    return file_path
+
 def format_MeuporgItem(it,
                        file_path,
                        sparse=False):
@@ -364,7 +373,7 @@ def format_MeuporgItem(it,
         result += "{} {} :: [[file:{}::{}][(→)]] ".format(
             "-",
             it.title,
-            file_path,
+            simplify_path(file_path),
             it.line_number,
         )
         if len(it.content) > 0:
@@ -375,18 +384,18 @@ def format_MeuporgItem(it,
             to_add = "{} {} [[file:{}][(→)]]\n".format(
                 "*" * (it.depth + 1),
                 it.title,
-                it.path,
+                simplify_path(it.path),
             )
         elif it.line_number == "folder": # case of a folder
-            to_add = "{} {}\n".format(
+            to_add = "{} ={}=\n".format(
                 "*" * (it.depth + 1),
-                file_path,
+                simplify_path(file_path),
             )
         else: # case of a heading in a file
             to_add = "{} {} [[file:{}::{}][(→)]]\n".format(
                 "*" * (it.depth + 1),
                 it.content,
-                it.path,
+                simplify_path(it.path),
                 it.line_number,
             )
         empty_section = True

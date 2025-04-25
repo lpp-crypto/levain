@@ -1,6 +1,6 @@
 #!/usr/bin/env sage 
 #-*- Python -*-
-# Time-stamp: <2025-04-15 16:39:30> 
+# Time-stamp: <2025-04-25 17:18:31> 
 
 import datetime, time
 import sys, os
@@ -400,6 +400,10 @@ class LogBook:
         self.success_counter = 0
         self.fail_counter = 0
         self.care_about_success_or_fail = False
+        # -- file to write to
+        with open(self.file_name, "w") as f:
+            f.write("{}\n".format(self.pretty_title))
+
             
         
 
@@ -432,6 +436,9 @@ class LogBook:
                 line = stylize(line, "bold")
             line += stylize(" ({}) ".format(time_stamp()), "white")
             self.display(line)
+        # writing the current story if the depth is 1
+        if depth == 1:
+            self.save_to_file()
         
         
     def log_event(self, *event, desc="t*"):
@@ -529,9 +536,7 @@ class LogBook:
     # !SUBSECTION! Writing story to file 
         
     def save_to_file(self):
-        with open(self.file_name, "w") as f:
-            f.write("{}\n".format(self.pretty_title))
-            # writing the story
+        with open(self.file_name, "a") as f:
             for line in self.story:
                 if "type" not in line.keys():
                     raise Exception(
@@ -562,6 +567,7 @@ class LogBook:
                         line["tstamp"],
                         line["content"]
                     ))
+            self.story = []
 
 
     # !SUBSECTION! The functions needed by the "with" logic
